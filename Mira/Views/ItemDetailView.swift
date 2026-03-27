@@ -136,6 +136,7 @@ struct MessageBubble: View {
                     .font(.body)
                     .foregroundStyle(Color(hex: 0xE9EDEF))
                     .tint(Color(hex: 0x53BDEB))
+                    .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.top, 8)
                     .padding(.bottom, 4)
@@ -188,6 +189,7 @@ struct MessageBubble: View {
                         .foregroundStyle(.red)
                     Text(message.content)
                         .font(.body)
+                        .textSelection(.enabled)
                 }
                 .padding(12)
                 .background(.red.opacity(0.1))
