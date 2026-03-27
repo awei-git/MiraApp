@@ -46,7 +46,10 @@ struct HomeView: View {
     @State private var showRecall = false
     @State private var recallQuery = ""
     @State private var searchText = ""
+    @State private var debouncedSearchText = ""
     @State private var expandedSections: Set<String> = ["Today", "Yesterday"]
+    @State private var cachedGroupedItems: [(key: String, items: [MiraItem])] = []
+    @State private var lastFilteredItems: [MiraItem] = []
 
     var body: some View {
         NavigationStack {
@@ -84,7 +87,7 @@ struct HomeView: View {
                         }
 
                         // Date-grouped items
-                        ForEach(groupedItems, id: \.key) { group in
+                        ForEach(cachedGroupedItems, id: \.key) { group in
                             let isRecent = group.key == "Today" || group.key == "Yesterday"
 
                             // Date separator
@@ -146,7 +149,61 @@ struct HomeView: View {
                 NewItemSheet()
             }
             .refreshable { sync.refresh() }
+            .task(id: searchText) {
+                // 300ms debounce for search input
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                debouncedSearchText = searchText
+            }
+            .onChange(of: debouncedSearchText) { _, _ in recomputeGroupedItems() }
+            .onChange(of: store.items) { _, _ in recomputeGroupedItems() }
+            .onAppear { recomputeGroupedItems() }
         }
+    }
+
+    // MARK: - Cache Recomputation
+
+    private func recomputeGroupedItems() {
+        let items = filteredItems
+        // Skip if the underlying data hasn't changed
+        guard items != lastFilteredItems else { return }
+        lastFilteredItems = items
+        cachedGroupedItems = Self.computeGroupedItems(from: items)
+    }
+
+    private static let groupDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "MMM d"
+        return df
+    }()
+
+    private static func computeGroupedItems(from filtered: [MiraItem]) -> [(key: String, items: [MiraItem])] {
+        let cal = Calendar.current
+        var groups: [String: [MiraItem]] = [:]
+
+        for item in filtered {
+            let key: String
+            if cal.isDateInToday(item.createdDate) {
+                key = "Today"
+            } else if cal.isDateInYesterday(item.createdDate) {
+                key = "Yesterday"
+            } else {
+                key = groupDateFormatter.string(from: item.createdDate)
+            }
+            groups[key, default: []].append(item)
+        }
+
+        let order = ["Today", "Yesterday"]
+        return groups
+            .sorted { a, b in
+                let ai = order.firstIndex(of: a.key) ?? 99
+                let bi = order.firstIndex(of: b.key) ?? 99
+                if ai != bi { return ai < bi }
+                let ad = a.value.first?.date ?? .distantPast
+                let bd = b.value.first?.date ?? .distantPast
+                return ad > bd
+            }
+            .map { (key: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
     }
 
     // MARK: - Date Separator
@@ -181,47 +238,15 @@ struct HomeView: View {
 
     private var filteredItems: [MiraItem] {
         let base: [MiraItem]
-        if searchText.isEmpty {
+        if debouncedSearchText.isEmpty {
             let tenDaysAgo = Calendar.current.date(byAdding: .day, value: -10,
                                                     to: Calendar.current.startOfDay(for: Date()))!
             base = store.allVisible.filter { $0.createdDate >= tenDaysAgo }
         } else {
-            base = store.search(searchText)
+            base = store.search(debouncedSearchText)
         }
         // Exclude request (todo/task) items — they're shown in the todo card
         return base.filter { $0.type != .request }
-    }
-
-    private var groupedItems: [(key: String, items: [MiraItem])] {
-        let cal = Calendar.current
-        var groups: [String: [MiraItem]] = [:]
-
-        for item in filteredItems {
-            let key: String
-            if cal.isDateInToday(item.createdDate) {
-                key = "Today"
-            } else if cal.isDateInYesterday(item.createdDate) {
-                key = "Yesterday"
-            } else {
-                let df = DateFormatter()
-                df.dateFormat = "MMM d"
-                key = df.string(from: item.createdDate)
-            }
-            groups[key, default: []].append(item)
-        }
-
-        // Sort: today first, then yesterday, then by date descending
-        let order = ["Today", "Yesterday"]
-        return groups
-            .sorted { a, b in
-                let ai = order.firstIndex(of: a.key) ?? 99
-                let bi = order.firstIndex(of: b.key) ?? 99
-                if ai != bi { return ai < bi }
-                let ad = a.value.first?.date ?? .distantPast
-                let bd = b.value.first?.date ?? .distantPast
-                return ad > bd
-            }
-            .map { (key: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
     }
 
     private var statusPill: some View {
@@ -411,19 +436,25 @@ struct ChatListRow: View {
         }
     }
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
     private var timeString: String {
         let s = Date().timeIntervalSince(item.date)
         if s < 60 { return "now" }
         if s < 3600 { return "\(Int(s / 60))m ago" }
-        if s < 86400 {
-            let f = DateFormatter()
-            f.dateFormat = "HH:mm"
-            return f.string(from: item.date)
-        }
+        if s < 86400 { return Self.timeFormatter.string(from: item.date) }
         if s < 172800 { return "Yesterday" }
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return f.string(from: item.date)
+        return Self.dateFormatter.string(from: item.date)
     }
 }
 

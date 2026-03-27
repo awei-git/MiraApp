@@ -8,6 +8,12 @@ struct SettingsView: View {
     @Environment(ItemStore.self) private var store
     @State private var showFolderPicker = false
 
+    private static let heartbeatFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
     var body: some View {
         NavigationStack {
             List {
@@ -19,7 +25,7 @@ struct SettingsView: View {
                         Text(sync.agentOnline ? "Online" : "Offline")
                         Spacer()
                         if let hb = sync.heartbeat {
-                            Text(hb.timestamp.prefix(19).replacingOccurrences(of: "T", with: " "))
+                            Text(Self.heartbeatFormatter.string(from: hb.date))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

@@ -93,6 +93,12 @@ struct ThreadsView: View {
         }
     }
 
+    private static let groupDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "MMM d"
+        return df
+    }()
+
     private var isSearching: Bool { !searchText.isEmpty }
 
     private var filteredItems: [MiraItem] {
@@ -174,9 +180,7 @@ struct ThreadsView: View {
             } else if cal.isDateInYesterday(groupDate) {
                 key = "Yesterday"
             } else {
-                let df = DateFormatter()
-                df.dateFormat = "MMM d"
-                key = df.string(from: groupDate)
+                key = Self.groupDateFormatter.string(from: groupDate)
             }
             groups[key, default: []].append(item)
         }

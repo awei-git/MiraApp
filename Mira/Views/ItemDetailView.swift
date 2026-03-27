@@ -113,6 +113,20 @@ struct ItemDetailView: View {
 struct MessageBubble: View {
     let message: ItemMessage
 
+    // Cache parsed markdown keyed by message content
+    private static var markdownCache: [String: AttributedString] = [:]
+
+    private var cachedMarkdownContent: AttributedString {
+        if let cached = Self.markdownCache[message.content] {
+            return cached
+        }
+        let result = (try? AttributedString(markdown: message.content,
+                                             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(message.content)
+        Self.markdownCache[message.content] = result
+        return result
+    }
+
     var body: some View {
         switch message.kind {
         case .statusCard:
@@ -132,7 +146,7 @@ struct MessageBubble: View {
         HStack(alignment: .bottom) {
             if message.isUser { Spacer(minLength: 50) }
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 2) {
-                Text(markdownContent)
+                Text(cachedMarkdownContent)
                     .font(.body)
                     .foregroundStyle(Color(hex: 0xE9EDEF))
                     .tint(Color(hex: 0x53BDEB))
@@ -158,12 +172,6 @@ struct MessageBubble: View {
             .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
             if message.isAgent { Spacer(minLength: 50) }
         }
-    }
-
-    private var markdownContent: AttributedString {
-        (try? AttributedString(markdown: message.content,
-                               options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-        ?? AttributedString(message.content)
     }
 
     private var statusCardView: some View {
@@ -202,10 +210,14 @@ struct MessageBubble: View {
         }
     }
 
-    private var timeString: String {
+    private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "h:mm a"
-        return f.string(from: message.date)
+        return f
+    }()
+
+    private var timeString: String {
+        Self.timeFormatter.string(from: message.date)
     }
 }
 

@@ -300,16 +300,32 @@ struct ArtifactItemRow: View {
         }
     }
 
-    private func formatDate(_ date: Date) -> String {
+    private static let todayFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let thisYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
+    }()
+
+    private static let oldFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy/M/d"
+        return f
+    }()
+
+    private func formatDate(_ date: Date) -> String {
         if Calendar.current.isDateInToday(date) {
-            f.dateFormat = "HH:mm"
+            return Self.todayFormatter.string(from: date)
         } else if Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) {
-            f.dateFormat = "M/d"
+            return Self.thisYearFormatter.string(from: date)
         } else {
-            f.dateFormat = "yyyy/M/d"
+            return Self.oldFormatter.string(from: date)
         }
-        return f.string(from: date)
     }
 
     private func formatSize(_ bytes: Int64) -> String {

@@ -3,6 +3,7 @@ import MiraBridge
 
 @main
 struct BridgeApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var config = BridgeConfig()
     @State private var store = ItemStore()
     @State private var todoStore: TodoStore?
@@ -47,6 +48,16 @@ struct BridgeApp: App {
                     startServices()
                 }
                 withAnimation(.easeOut(duration: 0.2)) { showSplash = false }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .background:
+                    store.saveToCache()
+                case .active:
+                    syncEngine?.refresh()
+                default:
+                    break
+                }
             }
         }
     }
