@@ -236,6 +236,7 @@ struct TodoDetailSheet: View {
                                     Text(todo.title)
                                         .font(.body)
                                         .foregroundStyle(Color(hex: 0xE9EDEF))
+                                        .textSelection(.enabled)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
                                 }
@@ -252,6 +253,7 @@ struct TodoDetailSheet: View {
                                             .font(.body)
                                             .foregroundStyle(Color(hex: 0xE9EDEF))
                                             .tint(Color(hex: 0x53BDEB))
+                                            .textSelection(.enabled)
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 8)
                                         HStack(spacing: 4) {
