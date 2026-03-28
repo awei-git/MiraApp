@@ -112,6 +112,7 @@ struct ItemDetailView: View {
 
 struct MessageBubble: View {
     let message: ItemMessage
+    @Environment(BridgeConfig.self) private var config
 
     // Cache parsed markdown keyed by message content
     private static var markdownCache: [String: AttributedString] = [:]
@@ -142,10 +143,27 @@ struct MessageBubble: View {
     private static let userBubbleColor = Color(hex: 0x005C4B)   // outgoing dark teal
     private static let agentBubbleColor = Color(hex: 0x202C33)  // incoming dark gray
 
+    private var loadedImage: UIImage? {
+        guard let path = message.imagePath,
+              let artifactsURL = config.artifactsURL else { return nil }
+        let url = artifactsURL.appending(path: path)
+        // Trigger iCloud download if needed
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return UIImage(data: data)
+    }
+
     private var textBubble: some View {
         HStack(alignment: .bottom) {
             if message.isUser { Spacer(minLength: 50) }
             VStack(alignment: message.isUser ? .trailing : .leading, spacing: 2) {
+                if let uiImage = loadedImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(maxWidth: 280, maxHeight: 350)
+                }
                 Text(cachedMarkdownContent)
                     .font(.body)
                     .foregroundStyle(Color(hex: 0xE9EDEF))
