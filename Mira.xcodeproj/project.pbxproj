@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA00000100000001000000AA /* MiraBridge in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000200000002000000AA /* MiraBridge */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		E269673E2F57EB51008F878D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -46,10 +50,6 @@
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXBuildFile section */
-		AA00000100000001000000AA /* MiraBridge in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000200000002000000AA /* MiraBridge */; };
-/* End PBXBuildFile section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		E269672D2F57EB50008F878D /* Frameworks */ = {
@@ -201,11 +201,11 @@
 			);
 			mainGroup = E26967272F57EB50008F878D;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = E26967312F57EB50008F878D /* Products */;
 			packageReferences = (
 				AA00000300000003000000AA /* XCLocalSwiftPackageReference "../MiraBridge/swift" */,
 			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E26967312F57EB50008F878D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -404,6 +404,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Mira/TalkBridge.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5PX85RX99G;
@@ -431,6 +432,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Mira/TalkBridge.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 5PX85RX99G;

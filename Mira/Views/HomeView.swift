@@ -42,6 +42,8 @@ struct HomeView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(ItemStore.self) private var store
     @Environment(CommandWriter.self) private var commands
+    @Environment(NotificationManager.self) private var notifications
+    @State private var navigationPath = NavigationPath()
     @State private var showNewItem = false
     @State private var showRecall = false
     @State private var recallQuery = ""
@@ -52,7 +54,7 @@ struct HomeView: View {
     @State private var lastFilteredItems: [MiraItem] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack(alignment: .bottomTrailing) {
                 warmBg.ignoresSafeArea()
 
@@ -157,6 +159,11 @@ struct HomeView: View {
             }
             .onChange(of: debouncedSearchText) { _, _ in recomputeGroupedItems() }
             .onChange(of: store.items) { _, _ in recomputeGroupedItems() }
+            .onChange(of: notifications.pendingDeepLinkItemId) { _, itemId in
+                guard let itemId else { return }
+                notifications.pendingDeepLinkItemId = nil
+                navigationPath.append(itemId)
+            }
             .onAppear { recomputeGroupedItems() }
         }
     }

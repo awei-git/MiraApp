@@ -44,6 +44,17 @@
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate to access your profile</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Mira reads your health data (weight, sleep, steps, heart rate) to provide personalized health monitoring and reports.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.angwei.mira.refresh</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>BackgroundColor</key>

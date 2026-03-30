@@ -1,5 +1,6 @@
 import SwiftUI
 import MiraBridge
+import LocalAuthentication
 
 @main
 struct BridgeApp: App {
@@ -11,6 +12,11 @@ struct BridgeApp: App {
     @State private var commands: CommandWriter?
     @State private var notifications = NotificationManager()
     @State private var showSplash = true
+    @State private var isLocked = true
+
+    init() {
+        BackgroundRefreshManager.shared.registerTask()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -42,6 +48,12 @@ struct BridgeApp: App {
                         .onAppear { startServices() }
                 }
             }
+            .overlay {
+                if isLocked {
+                    LockScreenView(agentName: config.agentName) { unlock() }
+                        .transition(.opacity)
+                }
+            }
             .preferredColorScheme(.dark)
             .onAppear {
                 if config.isSetup && config.isProfileSelected {
@@ -53,10 +65,39 @@ struct BridgeApp: App {
                 switch phase {
                 case .background:
                     store.saveToCache()
+                    BackgroundRefreshManager.shared.scheduleNextRefresh()
+                    isLocked = true
                 case .active:
                     syncEngine?.refresh()
+                    unlock()
                 default:
                     break
+                }
+            }
+        }
+    }
+
+    @State private var isAuthenticating = false
+
+    private func unlock() {
+        guard isLocked, !isAuthenticating else { return }
+        isAuthenticating = true
+
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            isLocked = false
+            isAuthenticating = false
+            return
+        }
+        context.evaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            localizedReason: "解锁 Mira"
+        ) { success, _ in
+            DispatchQueue.main.async {
+                isAuthenticating = false
+                if success {
+                    withAnimation { isLocked = false }
                 }
             }
         }
@@ -75,6 +116,11 @@ struct BridgeApp: App {
         notifications.agentName = config.agentName
         engine.startPolling()
         todos.refresh()
+        notifications.onApproval = { itemId, approved in
+            cmd.reply(to: itemId, content: approved ? "Approved" : "Rejected")
+        }
+        BackgroundRefreshManager.shared.configure(config: config, store: store, notifications: notifications)
+        BackgroundRefreshManager.shared.scheduleNextRefresh()
     }
 }
 
@@ -83,6 +129,7 @@ struct BridgeApp: App {
 struct MainTabView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(ItemStore.self) private var store
+    @Environment(NotificationManager.self) private var notifications
 
     var body: some View {
         TabView {
@@ -97,6 +144,11 @@ struct MainTabView: View {
                     Label("Todo", systemImage: "checklist")
                 }
 
+            HealthView()
+                .tabItem {
+                    Label("Health", systemImage: "heart.text.clipboard")
+                }
+
             ArtifactsView()
                 .tabItem {
                     Label("Artifacts", systemImage: "archivebox")
@@ -108,6 +160,9 @@ struct MainTabView: View {
                 }
         }
         .tint(Color(hex: 0x00A884))
+        .onChange(of: store.items) { _, newItems in
+            notifications.processChanges(items: newItems)
+        }
     }
 }
 
@@ -139,5 +194,39 @@ struct SplashView: View {
             }
         }
         .onAppear { pulse = true }
+    }
+}
+
+// MARK: - Lock Screen
+
+struct LockScreenView: View {
+    let agentName: String
+    let onUnlock: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color(hex: 0x111B21).ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                Image(systemName: "faceid")
+                    .font(.system(size: 56))
+                    .foregroundStyle(Color(hex: 0x00A884))
+
+                Text(agentName)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Button {
+                    onUnlock()
+                } label: {
+                    Text("解锁")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 32)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: 0x00A884), in: Capsule())
+                }
+            }
+        }
     }
 }
