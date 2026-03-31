@@ -70,6 +70,9 @@ struct HealthView: View {
                 .padding(.bottom, 16)
             }
             .navigationTitle("Health")
+            .navigationDestination(for: String.self) { id in
+                ItemDetailView(itemId: id)
+            }
             .sheet(isPresented: $showInput) {
                 HealthInputSheet(commands: commands)
             }
@@ -232,29 +235,37 @@ struct HealthAlertBanner: View {
         .sorted { $0.date > $1.date }
     }
 
+    @State private var selectedAlertId: String?
+
     var body: some View {
         if let alert = alerts.first {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                    Text("健康提醒")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(relativeDate(alert.date))
-                        .font(.caption2)
-                        .foregroundStyle(waTextSec)
-                }
+            NavigationLink(value: alert.id) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.yellow)
+                        Text("健康提醒")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text(relativeDate(alert.date))
+                            .font(.caption2)
+                            .foregroundStyle(waTextSec)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(waTextSec)
+                    }
 
-                Text(alert.lastMessagePreview)
-                    .font(.caption)
-                    .foregroundStyle(waTextPri)
-                    .lineLimit(6)
+                    Text(alert.lastMessagePreview)
+                        .font(.caption)
+                        .foregroundStyle(waTextPri)
+                        .lineLimit(6)
+                }
+                .padding(12)
+                .background(Color(hex: 0x7C2D12).opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.4), lineWidth: 1))
             }
-            .padding(12)
-            .background(Color(hex: 0x7C2D12).opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+            .buttonStyle(.plain)
         }
     }
 
@@ -282,23 +293,29 @@ struct HealthInsightCard: View {
 
     var body: some View {
         if let item = insight {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "brain.head.profile")
-                        .foregroundStyle(Color(hex: 0x00A884))
-                    Text("今日健康洞察")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                }
+            NavigationLink(value: item.id) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "brain.head.profile")
+                            .foregroundStyle(Color(hex: 0x00A884))
+                        Text("今日健康洞察")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(waTextSec)
+                    }
 
-                Text(item.lastMessagePreview)
-                    .font(.caption)
-                    .foregroundStyle(waTextPri)
-                    .lineLimit(8)
+                    Text(item.lastMessagePreview)
+                        .font(.caption)
+                        .foregroundStyle(waTextPri)
+                        .lineLimit(8)
+                }
+                .padding(12)
+                .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
             }
-            .padding(12)
-            .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
+            .buttonStyle(.plain)
         }
     }
 }
@@ -478,9 +495,6 @@ struct HealthFeedSection: View {
                 .background(waCardBg)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .padding(.horizontal, 12)
-            }
-            .navigationDestination(for: String.self) { id in
-                ItemDetailView(itemId: id)
             }
         }
     }
