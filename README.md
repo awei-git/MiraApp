@@ -1,16 +1,29 @@
 # MiraApp
 
-A generic iOS client for any AI agent that uses the [MiraBridge](../MiraBridge) protocol. Control your local agent from your iPhone — no server required.
+A SwiftUI iPhone app for controlling any AI agent that uses the [MiraBridge](../MiraBridge) protocol. Chat with your agent, monitor your health, manage tasks, and browse artifacts -- no server required.
 
-## What It Does
+## Tabs
 
-MiraApp is a ready-to-use iPhone app that connects to any agent running on your Mac via iCloud Drive. It provides:
+- **Home** -- chat interface for requests and discussions, agent status, daily feeds (briefings, sparks, analysis)
+- **Todo** -- shared todo list between you and the agent, with priority and follow-ups
+- **Health** -- dashboard with Apple Health + Oura Ring data, daily GPT health insights, anomaly alerts, trend charts, symptom/checkup input
+- **Artifacts** -- browse files the agent produces (writings, reports, research, audio)
+- **Settings** -- profile selection, bridge folder, notification preferences
 
-- **Chat interface** — send requests, have discussions, see agent responses
-- **Todo list** — shared between you and the agent
-- **Artifacts browser** — browse files the agent produces (writings, reports, etc.)
-- **Real-time status** — see if the agent is online, busy, or idle
-- **Notifications** — get notified when the agent needs your input or finishes a task
+## Health Tab
+
+The health tab connects two data sources:
+
+1. **Apple HealthKit** -- reads weight, sleep, steps, heart rate, HRV, blood oxygen, body fat directly from the Health app
+2. **Bridge summary** -- reads Oura Ring scores, stress/recovery data, and agent-generated notes from `health_summary.json`
+
+Features:
+- Dashboard cards for 16 metrics (vitals, body composition, Oura scores, activity)
+- 30-day trend charts (weight, sleep, HRV, body fat, blood oxygen, heart rate)
+- Daily GPT health insight card (tappable for full analysis)
+- Health alert banner with anomaly warnings (tappable for details)
+- Manual input for symptoms, blood pressure/sugar, and checkup report photos
+- Background export of Apple Health data to the agent for analysis
 
 ## Setup
 
@@ -25,8 +38,8 @@ MiraApp is a ready-to-use iPhone app that connects to any agent running on your 
 1. Clone this repo alongside MiraBridge:
    ```
    your-workspace/
-   ├── MiraBridge/    ← clone this first
-   └── MiraApp/       ← this repo
+   ├── MiraBridge/    <- clone this first
+   └── MiraApp/       <- this repo
    ```
 
 2. Open `Mira.xcodeproj` in Xcode
@@ -37,51 +50,37 @@ MiraApp is a ready-to-use iPhone app that connects to any agent running on your 
 
 1. The app asks you to select your Bridge folder on iCloud Drive
 2. Choose the folder your agent writes to (the one with `heartbeat.json`)
-3. Select your profile (defined in `profiles.json` by the agent)
-4. You're connected — the app starts polling for updates
+3. Select your profile
+4. You're connected -- the app starts polling for updates
 
 ## For Agent Developers
 
-MiraApp works with any agent that follows the MiraBridge protocol. Your agent just needs to:
-
-```python
-from mira_bridge import Bridge
-
-bridge = Bridge("/path/to/icloud/bridge", user_id="default")
-
-# Write a profiles.json so the app knows about you
-profiles = [{"id": "default", "displayName": "My Agent", "agentName": "Agent"}]
-
-# Start your loop
-while True:
-    bridge.heartbeat()
-    for cmd in bridge.poll_commands():
-        # handle commands...
-    time.sleep(30)
-```
-
-The app automatically adapts to your agent's name, shows your items, and routes commands back.
-
-## Customization
-
-The app uses a tag-based color system for feed items. Tag your items to get appropriate colors:
+MiraApp works with any agent that follows the MiraBridge protocol. Tag your items to get appropriate styling:
 
 | Tags | Color | Icon |
 |------|-------|------|
-| `explore`, `briefing`, `news` | Blue | Globe |
-| `analysis`, `market`, `research` | Green | Chart |
-| `alert`, `error`, `crash` | Amber | Warning |
+| `explore`, `briefing` | Blue | Globe |
+| `analysis`, `market` | Green | Chart |
+| `health`, `alert` | Orange | Warning triangle |
+| `health`, `insight` | Green | Brain |
+| `health`, `symptom` | Amber | Stethoscope |
 | `reflect`, `journal` | Gold | Brain |
+| `writing`, `article` | Purple | Doc |
 
 ## Architecture
 
 ```
 MiraApp (this repo)
-   ↓ imports
-MiraBridge (Swift package — models, sync, commands)
-   ↓ iCloud files
-Your Agent (Python — uses mira_bridge.Bridge)
+   | imports
+MiraBridge (Swift package -- models, sync, commands)
+   | iCloud files
+Your Agent (Python -- uses mira_bridge.Bridge)
 ```
+
+Key resilience features:
+- `MiraItem` and `ItemMessage` use fault-tolerant decoding (missing fields get defaults, legacy `role` key falls back to `sender`)
+- Local cache for offline access
+- Background refresh for health data export
 
 ## License
 

@@ -311,7 +311,6 @@ final class HealthDataProvider {
             debugLog += "\nDECODE ERROR: \(error)"
             return
         }
-        debugLog += "\nkeys: \(json.latest.keys.sorted().joined(separator: ", "))"
 
         let isoFull = ISO8601DateFormatter()
         isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -322,53 +321,62 @@ final class HealthDataProvider {
             isoFull.date(from: s) ?? isoBasic.date(from: s) ?? Date()
         }
 
-        for (key, val) in json.latest {
-            let metric = HealthMetric(value: val.value, date: parseDate(val.date))
-            switch key {
-            case "weight":       if weight == nil { weight = metric }
-            case "sleep_hours":  if sleepHours == nil { sleepHours = metric }
-            case "steps":        if steps == nil { steps = metric }
-            case "heart_rate":   if heartRate == nil { heartRate = metric }
-            case "body_fat":     if bodyFat == nil { bodyFat = metric }
-            case "hrv":          if hrv == nil { hrv = metric }
-            case "blood_oxygen": if bloodOxygen == nil { bloodOxygen = metric }
-            case "stress_high":    if stressHigh == nil { stressHigh = metric }
-            case "recovery_high":  if recoveryHigh == nil { recoveryHigh = metric }
-            case "readiness_score": if readinessScore == nil { readinessScore = metric }
-            case "activity_score": if activityScore == nil { activityScore = metric }
-            case "active_minutes": if activeMinutes == nil { activeMinutes = metric }
-            case "sleep_score":    if sleepScore == nil { sleepScore = metric }
-            default: break
-            }
-        }
-        debugLog += "\nhr=\(heartRate?.value ?? -1) hrv=\(hrv?.value ?? -1) o2=\(bloodOxygen?.value ?? -1)"
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.debugLog += "\nkeys: \(json.latest.keys.sorted().joined(separator: ", "))"
 
-        func bridgeTrend(_ key: String) -> [(date: Date, value: Double)] {
-            (json.trends[key] ?? []).compactMap { p in
-                let d = parseDate(p.date)
-                return (d, p.value)
+            func assignIfNewer(_ current: inout HealthMetric?, _ incoming: HealthMetric) {
+                guard current == nil || incoming.date >= current!.date else { return }
+                current = incoming
             }
-        }
-        if weightTrend.count < 2, let bt = json.trends["weight"], bt.count >= 2 {
-            weightTrend = bridgeTrend("weight")
-        }
-        if sleepTrend.count < 2, let bt = json.trends["sleep_hours"], bt.count >= 2 {
-            sleepTrend = bridgeTrend("sleep_hours")
-        }
-        if hrvTrend.count < 2, let bt = json.trends["hrv"], bt.count >= 2 {
-            hrvTrend = bridgeTrend("hrv")
-        }
-        if bodyFatTrend.count < 2, let bt = json.trends["body_fat"], bt.count >= 2 {
-            bodyFatTrend = bridgeTrend("body_fat")
-        }
-        if bloodOxygenTrend.count < 2, let bt = json.trends["blood_oxygen"], bt.count >= 2 {
-            bloodOxygenTrend = bridgeTrend("blood_oxygen")
-        }
-        if heartRateTrend.count < 2, let bt = json.trends["heart_rate"], bt.count >= 2 {
-            heartRateTrend = bridgeTrend("heart_rate")
-        }
 
-        notes = json.notes
+            for (key, val) in json.latest {
+                let metric = HealthMetric(value: val.value, date: parseDate(val.date))
+                switch key {
+                case "weight":          assignIfNewer(&self.weight, metric)
+                case "sleep_hours":     assignIfNewer(&self.sleepHours, metric)
+                case "steps":           assignIfNewer(&self.steps, metric)
+                case "heart_rate":      assignIfNewer(&self.heartRate, metric)
+                case "body_fat":        assignIfNewer(&self.bodyFat, metric)
+                case "hrv":             assignIfNewer(&self.hrv, metric)
+                case "blood_oxygen":    assignIfNewer(&self.bloodOxygen, metric)
+                case "stress_high":     assignIfNewer(&self.stressHigh, metric)
+                case "recovery_high":   assignIfNewer(&self.recoveryHigh, metric)
+                case "readiness_score": assignIfNewer(&self.readinessScore, metric)
+                case "activity_score":  assignIfNewer(&self.activityScore, metric)
+                case "active_minutes":  assignIfNewer(&self.activeMinutes, metric)
+                case "sleep_score":     assignIfNewer(&self.sleepScore, metric)
+                default: break
+                }
+            }
+            self.debugLog += "\nhr=\(self.heartRate?.value ?? -1) hrv=\(self.hrv?.value ?? -1) o2=\(self.bloodOxygen?.value ?? -1)"
+
+            func bridgeTrend(_ key: String) -> [(date: Date, value: Double)] {
+                (json.trends[key] ?? []).map { p in
+                    (date: parseDate(p.date), value: p.value)
+                }
+            }
+            if self.weightTrend.count < 2, let bt = json.trends["weight"], bt.count >= 2 {
+                self.weightTrend = bridgeTrend("weight")
+            }
+            if self.sleepTrend.count < 2, let bt = json.trends["sleep_hours"], bt.count >= 2 {
+                self.sleepTrend = bridgeTrend("sleep_hours")
+            }
+            if self.hrvTrend.count < 2, let bt = json.trends["hrv"], bt.count >= 2 {
+                self.hrvTrend = bridgeTrend("hrv")
+            }
+            if self.bodyFatTrend.count < 2, let bt = json.trends["body_fat"], bt.count >= 2 {
+                self.bodyFatTrend = bridgeTrend("body_fat")
+            }
+            if self.bloodOxygenTrend.count < 2, let bt = json.trends["blood_oxygen"], bt.count >= 2 {
+                self.bloodOxygenTrend = bridgeTrend("blood_oxygen")
+            }
+            if self.heartRateTrend.count < 2, let bt = json.trends["heart_rate"], bt.count >= 2 {
+                self.heartRateTrend = bridgeTrend("heart_rate")
+            }
+
+            self.notes = json.notes
+        }
     }
 }
 

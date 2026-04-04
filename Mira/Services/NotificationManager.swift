@@ -11,8 +11,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Set by the app to navigate to a specific item when notification is tapped.
     var pendingDeepLinkItemId: String?
 
+    private static let notifiedIdsKey = "Mira.Notifications.NotifiedIds"
+
     private var notifiedIds: Set<String> = []
     private var readIds: Set<String> = []
+    private var hasPrimedExistingFeedIds = false
 
     // MARK: - Category identifiers
 
@@ -27,6 +30,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     override init() {
         super.init()
+        loadPersistedNotificationState()
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in }
         center.delegate = self
@@ -81,26 +85,25 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Process Changes
 
     func processChanges(items: [MiraItem]) {
+        primeExistingFeedIdsIfNeeded(items)
+
         var newUnread = 0
         for item in items {
             if readIds.contains(item.id) { continue }
             if item.needsAttention { newUnread += 1 }
 
             // Needs attention (needs-input)
-            if item.needsAttention && !notifiedIds.contains(item.id) {
-                notifiedIds.insert(item.id)
+            if item.needsAttention && markNotified(item.id) {
                 sendNeedsInputNotification(item)
             }
 
             // Task completed (user-initiated tasks only)
-            if item.status == .done && item.origin == .user && !notifiedIds.contains("\(item.id)_done") {
-                notifiedIds.insert("\(item.id)_done")
+            if item.status == .done && item.origin == .user && markNotified("\(item.id)_done") {
                 sendDoneNotification(item)
             }
 
             // New agent-initiated feed items (briefings, sparks, journal)
-            if item.type == .feed && item.origin == .agent && !notifiedIds.contains("\(item.id)_feed") {
-                notifiedIds.insert("\(item.id)_feed")
+            if item.type == .feed && item.origin == .agent && markNotified("\(item.id)_feed") {
                 sendFeedNotification(item)
             }
         }
@@ -110,7 +113,7 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     func markAsRead(_ itemId: String) {
         readIds.insert(itemId)
-        notifiedIds.insert(itemId)
+        _ = markNotified(itemId)
     }
 
     private func updateBadge() {
@@ -250,5 +253,36 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     private func handleApproval(itemId: String, approved: Bool) {
         onApproval?(itemId, approved)
+    }
+
+    private func primeExistingFeedIdsIfNeeded(_ items: [MiraItem]) {
+        guard !hasPrimedExistingFeedIds else { return }
+        hasPrimedExistingFeedIds = true
+
+        let existingFeedIds = items
+            .filter { $0.type == .feed && $0.origin == .agent }
+            .map { "\($0.id)_feed" }
+        let baselineCount = notifiedIds.count
+        notifiedIds.formUnion(existingFeedIds)
+        if notifiedIds.count != baselineCount {
+            persistNotificationState()
+        }
+    }
+
+    private func markNotified(_ id: String) -> Bool {
+        let inserted = notifiedIds.insert(id).inserted
+        if inserted {
+            persistNotificationState()
+        }
+        return inserted
+    }
+
+    private func loadPersistedNotificationState() {
+        let storedIds = UserDefaults.standard.array(forKey: Self.notifiedIdsKey) as? [String] ?? []
+        notifiedIds = Set(storedIds)
+    }
+
+    private func persistNotificationState() {
+        UserDefaults.standard.set(Array(notifiedIds), forKey: Self.notifiedIdsKey)
     }
 }
