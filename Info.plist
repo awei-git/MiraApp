@@ -44,6 +44,13 @@
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate to access your profile</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mira connects to your Mac Studio on the local network for instant status updates.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Mira reads your health data (weight, sleep, steps, heart rate) to provide personalized health monitoring and reports.</string>
 	<key>UIBackgroundModes</key>
