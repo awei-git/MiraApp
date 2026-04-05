@@ -274,7 +274,8 @@ final class HealthExporter {
                 let mapped: [[String: Any]] = workouts.map { w in
                     let activityName = Self.workoutName(w.workoutActivityType)
                     let duration = w.duration / 60.0 // minutes
-                    let energy = w.totalEnergyBurned?.doubleValue(for: .kilocalorie()) ?? 0
+                    let energy = w.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                        .sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
                     return [
                         "type": "workout",
                         "value": duration,

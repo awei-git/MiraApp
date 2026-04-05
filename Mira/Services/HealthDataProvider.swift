@@ -312,16 +312,15 @@ final class HealthDataProvider {
             return
         }
 
-        let isoFull = ISO8601DateFormatter()
-        isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let isoBasic = ISO8601DateFormatter()
-        isoBasic.formatOptions = [.withInternetDateTime]
-
-        func parseDate(_ s: String) -> Date {
-            isoFull.date(from: s) ?? isoBasic.date(from: s) ?? Date()
-        }
-
         Task { @MainActor [weak self] in
+            let isoFull = ISO8601DateFormatter()
+            isoFull.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let isoBasic = ISO8601DateFormatter()
+            isoBasic.formatOptions = [.withInternetDateTime]
+
+            func parseDate(_ s: String) -> Date {
+                isoFull.date(from: s) ?? isoBasic.date(from: s) ?? Date()
+            }
             guard let self else { return }
             self.debugLog += "\nkeys: \(json.latest.keys.sorted().joined(separator: ", "))"
 
