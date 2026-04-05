@@ -24,11 +24,7 @@ struct SettingsView: View {
                             .frame(width: 10, height: 10)
                         Text(sync.agentOnline ? "Online" : "Offline")
                         Spacer()
-                        if let m = sync.lastManifest {
-                            Text(Self.heartbeatFormatter.string(from: m.date))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if let hb = sync.heartbeat {
+                        if let hb = sync.heartbeat {
                             Text(Self.heartbeatFormatter.string(from: hb.date))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
