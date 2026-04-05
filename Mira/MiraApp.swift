@@ -68,7 +68,7 @@ struct BridgeApp: App {
                     BackgroundRefreshManager.shared.scheduleNextRefresh()
                     isLocked = true
                 case .active:
-                    syncEngine?.refresh()
+                    syncEngine?.startPolling()  // reset fast-poll to get fresh heartbeat
                     unlock()
                 default:
                     break
