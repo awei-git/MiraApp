@@ -19,7 +19,7 @@ struct ItemDetailView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 8) {
-                            ForEach(item.messages) { msg in
+                            ForEach(item.messages.reversed()) { msg in
                                 MessageBubble(message: msg)
                                     .id(msg.id)
                             }
@@ -27,18 +27,7 @@ struct ItemDetailView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                     }
-                    .background(Color(hex: 0x0B141A)) // WhatsApp dark chat bg
-                    .onAppear {
-                        // Auto-scroll to bottom so latest content is visible
-                        if let last = item.messages.last {
-                            proxy.scrollTo(last.id, anchor: .bottom)
-                        }
-                    }
-                    .onChange(of: item.messages.count) { _, _ in
-                        if let last = item.messages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                        }
-                    }
+                    .background(Color(hex: 0x0B141A))
                 }
 
                 // Error banner
@@ -48,8 +37,8 @@ struct ItemDetailView: View {
                     }
                 }
 
-                // Reply input
-                if item.status != .archived {
+                // Reply input — hide for feeds and one-way items (book reviews, reports, etc.)
+                if item.status != .archived && item.type == .request {
                     replyBar(item: item)
                 }
             }
@@ -119,6 +108,7 @@ struct ItemDetailView: View {
 struct MessageBubble: View {
     let message: ItemMessage
     @Environment(BridgeConfig.self) private var config
+    @State private var loadedImage: UIImage?
 
     // Cache parsed markdown keyed by message content
     private static var markdownCache: [String: AttributedString] = [:]
@@ -149,14 +139,36 @@ struct MessageBubble: View {
     private static let userBubbleColor = Color(hex: 0x005C4B)   // outgoing dark teal
     private static let agentBubbleColor = Color(hex: 0x202C33)  // incoming dark gray
 
-    private var loadedImage: UIImage? {
-        guard let path = message.imagePath,
-              let artifactsURL = config.artifactsURL else { return nil }
-        let url = artifactsURL.appending(path: path)
-        // Trigger iCloud download if needed
-        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return UIImage(data: data)
+    private func loadImage() async {
+        guard let path = message.imagePath else { return }
+
+        // 1. Try iCloud file path
+        if let artifactsURL = config.artifactsURL {
+            let url = artifactsURL.appending(path: path)
+            if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                loadedImage = img
+                return
+            }
+            // Trigger iCloud download and poll briefly
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            for _ in 0..<6 {  // 3 seconds
+                try? await Task.sleep(for: .milliseconds(500))
+                if let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                    loadedImage = img
+                    return
+                }
+            }
+        }
+
+        // 2. Fallback: fetch from LAN web server
+        let serverBase = config.serverURL ?? BridgeConfig.defaultServerURL
+        let profileId = config.profile?.id ?? "ang"
+        let httpURL = serverBase.appending(path: "/api/\(profileId)/artifacts/\(path)")
+        if let (data, response) = try? await URLSession.shared.data(from: httpURL),
+           (response as? HTTPURLResponse)?.statusCode == 200,
+           let img = UIImage(data: data) {
+            loadedImage = img
+        }
     }
 
     private var textBubble: some View {
@@ -196,6 +208,7 @@ struct MessageBubble: View {
             .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
             if message.isAgent { Spacer(minLength: 50) }
         }
+        .task(id: message.imagePath) { await loadImage() }
     }
 
     private var statusCardView: some View {
