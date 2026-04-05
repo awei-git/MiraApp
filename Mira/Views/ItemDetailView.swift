@@ -28,6 +28,12 @@ struct ItemDetailView: View {
                         .padding(.vertical, 8)
                     }
                     .background(Color(hex: 0x0B141A)) // WhatsApp dark chat bg
+                    .onAppear {
+                        // Auto-scroll to bottom so latest content is visible
+                        if let last = item.messages.last {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
+                    }
                     .onChange(of: item.messages.count) { _, _ in
                         if let last = item.messages.last {
                             withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
