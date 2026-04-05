@@ -1,6 +1,6 @@
 # MiraApp
 
-A SwiftUI iPhone app for controlling any AI agent that uses the [MiraBridge](../MiraBridge) protocol. Chat with your agent, monitor your health, manage tasks, and browse artifacts -- no server required.
+A SwiftUI iPhone app for controlling any AI agent that uses the [MiraBridge](../MiraBridge) protocol. It works in pure iCloud mode, and can optionally take faster local reads from a trusted LAN mirror when one is available.
 
 ## Tabs
 
@@ -8,7 +8,7 @@ A SwiftUI iPhone app for controlling any AI agent that uses the [MiraBridge](../
 - **Todo** -- shared todo list between you and the agent, with priority and follow-ups
 - **Health** -- dashboard with Apple Health + Oura Ring data, daily GPT health insights, anomaly alerts, trend charts, symptom/checkup input
 - **Artifacts** -- browse files the agent produces (writings, reports, research, audio)
-- **Settings** -- profile selection, bridge folder, notification preferences
+- **Settings** -- profile selection, bridge workspace, agent heartbeat/debug info
 
 ## Health Tab
 
@@ -24,6 +24,17 @@ Features:
 - Health alert banner with anomaly warnings (tappable for details)
 - Manual input for symptoms, blood pressure/sugar, and checkup report photos
 - Background export of Apple Health data to the agent for analysis
+
+## Notifications
+
+The app sends local notifications for:
+
+- `needs-input` items
+- content review / approval requests with Approve and Reject actions
+- completed user requests
+- new feed items such as briefings, sparks, and health alerts
+
+Review and health/trading alerts can be raised as time-sensitive notifications.
 
 ## Setup
 
@@ -48,10 +59,10 @@ Features:
 
 ### First Launch
 
-1. The app asks you to select your Bridge folder on iCloud Drive
-2. Choose the folder your agent writes to (the one with `heartbeat.json`)
-3. Select your profile
-4. You're connected -- the app starts polling for updates
+1. The app asks you to select your workspace on iCloud Drive
+2. Choose either the `MtJoy` root or the `Mira-Bridge` folder your agent writes to
+3. Select your profile from `profiles.json` or the built-in defaults
+4. The app starts polling for updates and caching items locally for offline use
 
 ## For Agent Developers
 
@@ -81,6 +92,7 @@ Key resilience features:
 - `MiraItem` and `ItemMessage` use fault-tolerant decoding (missing fields get defaults, legacy `role` key falls back to `sender`)
 - Local cache for offline access
 - Background refresh for health data export
+- iCloud-first sync with optional LAN heartbeat / manifest / item reads when a local mirror is reachable
 
 ## License
 
