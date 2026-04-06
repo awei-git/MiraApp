@@ -37,8 +37,8 @@ struct ItemDetailView: View {
                     }
                 }
 
-                // Reply input — hide for feeds and one-way items (book reviews, reports, etc.)
-                if item.status != .archived && item.type == .request {
+                // Reply input — allow two-way request/discussion threads, keep feeds one-way.
+                if item.allowsReply {
                     replyBar(item: item)
                 }
             }
