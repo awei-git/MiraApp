@@ -44,7 +44,7 @@ struct MiraTests {
         )
 
         #expect(discussion.allowsReply)
-        #expect(!feed.allowsReply)
+        #expect(feed.allowsReply)
     }
 
 }
