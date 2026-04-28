@@ -4,7 +4,7 @@ import QuickLook
 
 // MARK: - Artifact Categories
 
-private struct ArtifactCategory: Identifiable {
+struct ArtifactCategory: Identifiable {
     let id: String
     let name: String
     let icon: String
@@ -12,12 +12,12 @@ private struct ArtifactCategory: Identifiable {
 }
 
 private let knownCategories: [ArtifactCategory] = [
-    ArtifactCategory(id: "writings", name: "Writings", icon: "doc.richtext", color: .purple),
-    ArtifactCategory(id: "briefings", name: "Briefings", icon: "newspaper", color: .blue),
-    ArtifactCategory(id: "audio", name: "Audio", icon: "waveform", color: .orange),
-    ArtifactCategory(id: "video", name: "Video", icon: "film", color: .red),
-    ArtifactCategory(id: "photos", name: "Photos", icon: "photo.on.rectangle", color: .green),
-    ArtifactCategory(id: "research", name: "Research", icon: "magnifyingglass.circle", color: .cyan),
+    ArtifactCategory(id: "writings",  name: "writings",  icon: "doc.text",       color: colorWriting),
+    ArtifactCategory(id: "briefings", name: "briefings", icon: "globe",          color: colorExplore),
+    ArtifactCategory(id: "audio",     name: "audio",     icon: "waveform",       color: colorPodcast),
+    ArtifactCategory(id: "video",     name: "video",     icon: "film",           color: colorAlert),
+    ArtifactCategory(id: "photos",    name: "photos",    icon: "photo",          color: colorPhoto),
+    ArtifactCategory(id: "research",  name: "research",  icon: "magnifyingglass", color: colorAnalysis),
 ]
 
 // MARK: - Artifacts View (tab root)
@@ -27,16 +27,26 @@ struct ArtifactsView: View {
 
     var body: some View {
         NavigationStack {
-            if let artifactsURL = config.artifactsURL {
-                ArtifactsRootView(artifactsURL: artifactsURL)
-                    .navigationTitle("Artifacts")
-            } else {
-                ContentUnavailableView(
-                    "No folder set",
-                    systemImage: "folder.badge.questionmark",
-                    description: Text("Select Bridge folder in Settings")
-                )
-                .navigationTitle("Artifacts")
+            Group {
+                if let artifactsURL = config.artifactsURL {
+                    ArtifactsRootView(artifactsURL: artifactsURL)
+                } else {
+                    ContentUnavailableView(
+                        "No folder set",
+                        systemImage: "folder.badge.questionmark",
+                        description: Text("Select Bridge folder in Settings")
+                    )
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("artifacts")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(waTextPri)
+                        .tracking(0.3)
+                }
             }
         }
     }
@@ -47,40 +57,37 @@ struct ArtifactsRootView: View {
     @State private var folders: [ArtifactFolder] = []
 
     var body: some View {
-        List(folders) { folder in
-            NavigationLink {
-                ArtifactFolderBrowser(folderURL: folder.url)
-                    .navigationTitle(folder.category?.name ?? folder.name)
-            } label: {
-                HStack(spacing: 12) {
-                    if let cat = folder.category {
-                        Image(systemName: cat.icon)
-                            .font(.title3)
-                            .foregroundStyle(cat.color)
-                            .frame(width: 32, height: 32)
-                            .background(cat.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
-                    } else {
-                        Image(systemName: "folder")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                            .frame(width: 32, height: 32)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(folder.category?.name ?? folder.name)
-                            .font(.body.weight(.medium))
-                        if folder.itemCount > 0 {
-                            Text("\(folder.itemCount) items")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+        ZStack {
+            waListBg.ignoresSafeArea()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("collections")
+                        .font(.system(size: 11).monospaced())
+                        .foregroundStyle(waTextDim)
+                        .tracking(1.2)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                        .padding(.bottom, 12)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(folders.enumerated()), id: \.element.id) { idx, folder in
+                            NavigationLink {
+                                ArtifactFolderBrowser(folderURL: folder.url, title: folder.category?.name ?? folder.name)
+                            } label: {
+                                ArtifactFolderRow(folder: folder)
+                            }
+                            .buttonStyle(.plain)
+                            if idx < folders.count - 1 {
+                                Rectangle().fill(waBorder).frame(height: 0.5).padding(.leading, 18)
+                            }
                         }
                     }
+                    Spacer(minLength: 80)
                 }
-                .padding(.vertical, 4)
             }
+            .refreshable { loadFolders() }
         }
-        .listStyle(.insetGrouped)
         .onAppear { loadFolders() }
-        .refreshable { loadFolders() }
     }
 
     private func loadFolders() {
@@ -129,7 +136,7 @@ struct ArtifactsRootView: View {
     }
 }
 
-private struct ArtifactFolder: Identifiable {
+struct ArtifactFolder: Identifiable {
     let name: String
     let url: URL
     let category: ArtifactCategory?
@@ -141,37 +148,65 @@ private struct ArtifactFolder: Identifiable {
 
 struct ArtifactFolderBrowser: View {
     let folderURL: URL
+    var title: String = ""
     @State private var items: [ArtifactItem] = []
     @State private var previewURL: URL?
 
     var body: some View {
-        Group {
+        ZStack {
+            waListBg.ignoresSafeArea()
             if items.isEmpty {
-                ContentUnavailableView("Empty", systemImage: "tray")
-            } else {
-                List(items) { item in
-                    if item.isDirectory {
-                        NavigationLink {
-                            ArtifactFolderBrowser(folderURL: item.url)
-                                .navigationTitle(item.name)
-                        } label: {
-                            ArtifactItemRow(item: item)
-                        }
-                    } else {
-                        Button {
-                            triggerDownload(item.url)
-                            previewURL = item.url
-                        } label: {
-                            ArtifactItemRow(item: item)
-                        }
-                    }
+                VStack(spacing: 8) {
+                    Text("empty")
+                        .font(.system(size: 12).monospaced())
+                        .foregroundStyle(waTextDim)
+                        .tracking(1.2)
                 }
-                .listStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            if item.isDirectory {
+                                NavigationLink {
+                                    ArtifactFolderBrowser(folderURL: item.url, title: item.name)
+                                } label: {
+                                    ArtifactItemRow(item: item)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Button {
+                                    triggerDownload(item.url)
+                                    previewURL = item.url
+                                } label: {
+                                    ArtifactItemRow(item: item)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if idx < items.count - 1 {
+                                Rectangle().fill(waBorder).frame(height: 0.5).padding(.leading, 18)
+                            }
+                        }
+                        Spacer(minLength: 80)
+                    }
+                    .padding(.top, 8)
+                }
+                .refreshable { loadItems() }
             }
         }
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !title.isEmpty {
+                ToolbarItem(placement: .principal) {
+                    Text(title.lowercased())
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(waTextPri)
+                        .tracking(0.3)
+                }
+            }
+        }
         .onAppear { loadItems() }
-        .refreshable { loadItems() }
         .quickLookPreview($previewURL)
     }
 
@@ -234,19 +269,62 @@ struct ArtifactItem: Identifiable {
 
 // MARK: - Item Row
 
+struct ArtifactFolderRow: View {
+    let folder: ArtifactFolder
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(folder.category?.color ?? waTextSec)
+                    .frame(width: 38, height: 38)
+                Image(systemName: folder.category?.icon ?? "folder")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(waListBg)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(folder.category?.name ?? folder.name)
+                    .font(.system(size: 15))
+                    .foregroundStyle(waTextPri)
+                Text("\(folder.itemCount) item\(folder.itemCount == 1 ? "" : "s")")
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .light))
+                .foregroundStyle(waTextDim)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(
+            ZStack {
+                waCardBg
+                (folder.category?.color ?? Color.clear).opacity(0.10)
+            }
+        )
+    }
+}
+
 struct ArtifactItemRow: View {
     let item: ArtifactItem
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: item.isDirectory ? "folder.fill" : fileIcon(item.name))
-                .foregroundStyle(item.isDirectory ? .blue : iconColor(item.name))
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(iconColor(item.name).opacity(item.isDirectory ? 1.0 : 0.85))
+                    .frame(width: 36, height: 36)
+                Image(systemName: item.isDirectory ? "folder" : fileIcon(item.name))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(waListBg)
+            }
+            VStack(alignment: .leading, spacing: 4) {
                 Text(displayName(item.name))
-                    .font(.body)
+                    .font(.system(size: 14))
+                    .foregroundStyle(waTextPri)
                     .lineLimit(2)
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     Text(formatDate(item.date))
                     if !item.isDirectory && item.size > 0 {
                         Text(formatSize(item.size))
@@ -255,14 +333,17 @@ struct ArtifactItemRow: View {
                         Text("\(item.childCount) items")
                     }
                 }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
             }
+            Spacer()
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(waCardBg)
     }
 
     private func displayName(_ name: String) -> String {
-        // Strip extension for common document types, keep for media
         let ext = (name as NSString).pathExtension.lowercased()
         switch ext {
         case "md", "txt", "json":
@@ -290,32 +371,26 @@ struct ArtifactItemRow: View {
     private func iconColor(_ name: String) -> Color {
         let ext = (name as NSString).pathExtension.lowercased()
         switch ext {
-        case "md", "txt": return .secondary
-        case "pdf": return .red
-        case "jpg", "jpeg", "png", "heic", "gif", "webp": return .green
-        case "mp4", "mov", "m4v", "avi": return .red
-        case "mp3", "m4a", "wav", "aac", "flac": return .orange
-        case "swift", "py", "js", "ts": return .blue
-        default: return .secondary
+        case "md", "txt":                                return colorWriting
+        case "pdf":                                      return colorAlert
+        case "jpg", "jpeg", "png", "heic", "gif", "webp": return colorPhoto
+        case "mp4", "mov", "m4v", "avi":                 return colorPodcast
+        case "mp3", "m4a", "wav", "aac", "flac":         return colorPodcast
+        case "swift", "py", "js", "ts":                  return colorCode
+        case "json":                                     return colorCode
+        case "epub":                                     return colorJournal
+        default:                                         return colorAgent
         }
     }
 
     private static let todayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f
+        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f
     }()
-
     private static let thisYearFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "M/d"
-        return f
+        let f = DateFormatter(); f.dateFormat = "M/d"; return f
     }()
-
     private static let oldFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy/M/d"
-        return f
+        let f = DateFormatter(); f.dateFormat = "yyyy/M/d"; return f
     }()
 
     private func formatDate(_ date: Date) -> String {

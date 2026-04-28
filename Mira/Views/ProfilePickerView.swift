@@ -14,7 +14,7 @@ struct ProfilePickerView: View {
 
             Image(systemName: "bubble.left.and.bubble.right.fill")
                 .font(.system(size: 56))
-                .foregroundStyle(Color(hex: 0x00A884))
+                .foregroundStyle(waAccent)
 
             Text("Bridge")
                 .font(.largeTitle.weight(.bold))
@@ -36,7 +36,7 @@ struct ProfilePickerView: View {
                 VStack(spacing: 12) {
                     Text("Connect to iCloud Drive")
                         .font(.subheadline)
-                        .foregroundStyle(Color(hex: 0x8696A0))
+                        .foregroundStyle(waTextSec)
 
                     Button { showFolderPicker = true } label: {
                         HStack {
@@ -47,7 +47,7 @@ struct ProfilePickerView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 12)
-                        .background(Color(hex: 0x00A884))
+                        .background(waAccent)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
@@ -130,7 +130,7 @@ struct ProfileRow: View {
         HStack(spacing: 16) {
             Image(systemName: profile.avatar)
                 .font(.system(size: 28))
-                .foregroundStyle(Color(hex: 0x00A884))
+                .foregroundStyle(waAccent)
                 .frame(width: 52, height: 52)
                 .background(Color(hex: 0x1F2C34))
                 .clipShape(Circle())
@@ -141,14 +141,14 @@ struct ProfileRow: View {
                     .foregroundStyle(Color(hex: 0xE9EDEF))
                 Text("Agent: \(profile.agentName)")
                     .font(.caption)
-                    .foregroundStyle(Color(hex: 0x8696A0))
+                    .foregroundStyle(waTextSec)
             }
 
             Spacer()
 
             Image(systemName: "faceid")
                 .font(.title3)
-                .foregroundStyle(Color(hex: 0x8696A0))
+                .foregroundStyle(waTextSec)
         }
         .padding(16)
         .background(Color(hex: 0x1F2C34))

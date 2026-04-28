@@ -1,5 +1,6 @@
 import SwiftUI
 import MiraBridge
+import SafariServices
 
 struct ItemDetailView: View {
     let itemId: String
@@ -8,6 +9,7 @@ struct ItemDetailView: View {
     @Environment(NotificationManager.self) private var notifications
     @State private var replyText = ""
     @State private var showTagEditor = false
+    @State private var safariURL: URL?
     @FocusState private var inputFocused: Bool
 
     private var item: MiraItem? { store.item(for: itemId) }
@@ -18,16 +20,16 @@ struct ItemDetailView: View {
                 // Messages
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 8) {
+                        LazyVStack(spacing: 10) {
                             ForEach(item.messages.reversed()) { msg in
                                 MessageBubble(message: msg)
                                     .id(msg.id)
                             }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
                     }
-                    .background(Color(hex: 0x0B141A))
+                    .background(waChatBg)
                 }
 
                 // Error banner
@@ -42,9 +44,16 @@ struct ItemDetailView: View {
                     replyBar(item: item)
                 }
             }
-            .navigationTitle(item.title)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(item.title.lowercased())
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(waTextPri)
+                        .lineLimit(1)
+                        .tracking(0.2)
+                }
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {
                         Button { commands.pin(itemId: itemId, pinned: !item.pinned) } label: {
@@ -61,11 +70,25 @@ struct ItemDetailView: View {
                             Label("Archive", systemImage: "archivebox")
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(waTextSec)
                     }
                 }
             }
-            .onAppear { notifications.markAsRead(itemId) }
+            .toolbarBackground(waListBg, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .environment(\.openURL, OpenURLAction { url in
+                // Force in-app Safari (SFSafariViewController) so URLs always
+                // open as web pages instead of being intercepted by Universal
+                // Links into native apps (Reddit, Twitter, etc.).
+                safariURL = url
+                return .handled
+            })
+            .sheet(item: $safariURL) { url in
+                SafariView(url: url).ignoresSafeArea()
+            }
+            .onAppear { notifications.markAsRead(itemId, version: item.updatedAt) }
         } else {
             ContentUnavailableView("Item not found",
                                    systemImage: "questionmark.circle",
@@ -75,14 +98,17 @@ struct ItemDetailView: View {
 
     @ViewBuilder
     private func replyBar(item: MiraItem) -> some View {
-        HStack(spacing: 8) {
-            TextField("Reply...", text: $replyText, axis: .vertical)
+        HStack(spacing: 10) {
+            TextField("reply", text: $replyText, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
                 .focused($inputFocused)
-                .padding(10)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .font(.system(size: 14))
+                .foregroundStyle(waTextPri)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(waCardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
             Button {
                 let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -91,15 +117,18 @@ struct ItemDetailView: View {
                 replyText = ""
                 inputFocused = false
             } label: {
-                Image(systemName: replyText.isEmpty ? "mic.fill" : "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(replyText.isEmpty ? Color(hex: 0x8696A0) : Color(hex: 0x00A884))
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(replyText.isEmpty ? waTextDim : waListBg)
+                    .frame(width: 36, height: 36)
+                    .background(replyText.isEmpty ? waCardBg : waAccent)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .disabled(replyText.isEmpty)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.bar)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(waListBg)
     }
 }
 
@@ -110,16 +139,32 @@ struct MessageBubble: View {
     @Environment(BridgeConfig.self) private var config
     @State private var loadedImage: UIImage?
 
-    // Cache parsed markdown keyed by message content
+    // Parse markdown preserving whitespace (so newlines/paragraphs survive),
+    // then explicitly color and underline links so tap targets are obvious.
     private static var markdownCache: [String: AttributedString] = [:]
 
     private var cachedMarkdownContent: AttributedString {
         if let cached = Self.markdownCache[message.content] {
             return cached
         }
-        let result = (try? AttributedString(markdown: message.content,
-                                             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(message.content)
+        // inlineOnlyPreservingWhitespace keeps line breaks and lists as
+        // visible newlines, while still recognizing inline markdown
+        // including [text](url) links.
+        var result = (try? AttributedString(
+            markdown: message.content,
+            options: .init(
+                allowsExtendedAttributes: true,
+                interpretedSyntax: .inlineOnlyPreservingWhitespace,
+                failurePolicy: .returnPartiallyParsedIfPossible
+            )
+        )) ?? AttributedString(message.content)
+
+        for run in result.runs {
+            if run.link != nil {
+                result[run.range].foregroundColor = waLink
+                result[run.range].underlineStyle = .single
+            }
+        }
         Self.markdownCache[message.content] = result
         return result
     }
@@ -135,9 +180,9 @@ struct MessageBubble: View {
         }
     }
 
-    // WhatsApp dark mode bubble colors
-    private static let userBubbleColor = Color(hex: 0x005C4B)   // outgoing dark teal
-    private static let agentBubbleColor = Color(hex: 0x202C33)  // incoming dark gray
+    // Bubble colors — derived from theme tokens
+    private static let userBubbleColor = waOutBubble
+    private static let agentBubbleColor = waCardBg
 
     private func loadImage() async {
         guard let path = message.imagePath else { return }
@@ -174,7 +219,7 @@ struct MessageBubble: View {
     private var textBubble: some View {
         HStack(alignment: .bottom) {
             if message.isUser { Spacer(minLength: 50) }
-            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 2) {
+            VStack(alignment: message.isUser ? .trailing : .leading, spacing: 4) {
                 if let uiImage = loadedImage {
                     Image(uiImage: uiImage)
                         .resizable()
@@ -183,29 +228,21 @@ struct MessageBubble: View {
                         .frame(maxWidth: 280, maxHeight: 350)
                 }
                 Text(cachedMarkdownContent)
-                    .font(.body)
-                    .foregroundStyle(Color(hex: 0xE9EDEF))
-                    .tint(Color(hex: 0x53BDEB))
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                    .font(.system(size: 14))
+                    .foregroundStyle(waTextPri)
+                    .tint(waLink)
+                    .lineSpacing(2)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
                     .padding(.bottom, 4)
-                HStack(spacing: 4) {
-                    Text(timeString)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    if message.isUser {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 9))
-                            .foregroundStyle(Color(hex: 0x53BDEB)) // blue tick
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
+                Text(timeString)
+                    .font(.system(size: 10).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 8)
             }
             .background(message.isUser ? Self.userBubbleColor : Self.agentBubbleColor)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
             if message.isAgent { Spacer(minLength: 50) }
         }
         .task(id: message.imagePath) { await loadImage() }
@@ -215,33 +252,37 @@ struct MessageBubble: View {
         HStack(spacing: 6) {
             if let card = message.statusCard {
                 Image(systemName: card.icon)
-                    .font(.caption)
-                    .foregroundStyle(.blue)
+                    .font(.system(size: 11))
+                    .foregroundStyle(waAccent)
                 Text(card.text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(0.5)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
 
     private var errorView: some View {
         HStack {
             Spacer(minLength: 40)
             VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
+                        .font(.system(size: 12))
+                        .foregroundStyle(waStatusAlert)
                     Text(message.content)
-                        .font(.body)
+                        .font(.system(size: 14))
+                        .foregroundStyle(waTextPri)
                         .textSelection(.enabled)
                 }
-                .padding(12)
-                .background(.red.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(waStatusAlert.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 Text(timeString)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 10).monospaced())
+                    .foregroundStyle(waTextDim)
             }
             Spacer(minLength: 40)
         }
@@ -265,25 +306,54 @@ struct ErrorBanner: View {
     let onRetry: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-            VStack(alignment: .leading) {
+                .font(.system(size: 13))
+                .foregroundStyle(waStatusAlert)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(error.message)
-                    .font(.caption)
+                    .font(.system(size: 13))
+                    .foregroundStyle(waTextPri)
                 Text(error.code)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
             }
             Spacer()
             if error.retryable {
-                Button("Retry", action: onRetry)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .controlSize(.small)
+                Button(action: onRetry) {
+                    Text("retry")
+                        .font(.system(size: 12).monospaced())
+                        .foregroundStyle(waListBg)
+                        .tracking(0.5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(waStatusAlert)
+                }
+                .buttonStyle(.plain)
             }
         }
-        .padding(10)
-        .background(.red.opacity(0.08))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(waStatusAlert.opacity(0.12))
     }
+}
+
+// MARK: - SFSafariViewController wrapper
+
+extension URL: @retroactive Identifiable {
+    public var id: String { absoluteString }
+}
+
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let cfg = SFSafariViewController.Configuration()
+        cfg.entersReaderIfAvailable = false
+        let vc = SFSafariViewController(url: url, configuration: cfg)
+        vc.preferredBarTintColor = UIColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x22/255.0, alpha: 1)
+        vc.preferredControlTintColor = UIColor(red: 0x8F/255.0, green: 0xE5/255.0, blue: 0xB8/255.0, alpha: 1)
+        vc.dismissButtonStyle = .done
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }

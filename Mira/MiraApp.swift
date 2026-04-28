@@ -11,17 +11,51 @@ struct BridgeApp: App {
     @State private var syncEngine: SyncEngine?
     @State private var commands: CommandWriter?
     @State private var notifications = NotificationManager()
+    @State private var healthData = HealthDataProvider()
     @State private var showSplash = true
-    @State private var isLocked = true
+    @State private var isLocked = false
 
     init() {
         BackgroundRefreshManager.shared.registerTask()
+        configureAppearance()
+    }
+
+    /// Apply the Mira palette to UIKit-backed chrome (nav bar + tab bar)
+    /// so SwiftUI's NavigationStack/TabView don't fall back to default white/blur.
+    private func configureAppearance() {
+        let listBg = UIColor(red: 0x1A/255.0, green: 0x1A/255.0, blue: 0x22/255.0, alpha: 1)
+        let textPri = UIColor(red: 0xF2/255.0, green: 0xF2/255.0, blue: 0xEE/255.0, alpha: 1)
+        let textDim = UIColor(red: 0x6E/255.0, green: 0x6E/255.0, blue: 0x7A/255.0, alpha: 1)
+        let accent  = UIColor(red: 0x8F/255.0, green: 0xE5/255.0, blue: 0xB8/255.0, alpha: 1)
+
+        let nav = UINavigationBarAppearance()
+        nav.configureWithOpaqueBackground()
+        nav.backgroundColor = listBg
+        nav.shadowColor = .clear
+        nav.titleTextAttributes = [.foregroundColor: textPri]
+        nav.largeTitleTextAttributes = [.foregroundColor: textPri]
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+        UINavigationBar.appearance().compactAppearance = nav
+        UINavigationBar.appearance().tintColor = accent
+
+        let tab = UITabBarAppearance()
+        tab.configureWithOpaqueBackground()
+        tab.backgroundColor = listBg
+        tab.shadowColor = .clear
+        let item = tab.stackedLayoutAppearance
+        item.normal.iconColor = textDim
+        item.normal.titleTextAttributes = [.foregroundColor: textDim]
+        item.selected.iconColor = accent
+        item.selected.titleTextAttributes = [.foregroundColor: accent]
+        UITabBar.appearance().standardAppearance = tab
+        UITabBar.appearance().scrollEdgeAppearance = tab
     }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
-                Color(hex: 0x008069).ignoresSafeArea()
+                waListBg.ignoresSafeArea()
 
                 if showSplash {
                     SplashView(agentName: config.agentName)
@@ -40,6 +74,7 @@ struct BridgeApp: App {
                         .environment(notifications)
                         .environment(engine)
                         .environment(cmds)
+                        .environment(healthData)
                         .onAppear { engine.startPolling() }
                         .transition(.opacity)
                 } else if config.isProfileSelected {
@@ -66,10 +101,11 @@ struct BridgeApp: App {
                 case .background:
                     store.saveToCache()
                     BackgroundRefreshManager.shared.scheduleNextRefresh()
-                    isLocked = true
                 case .active:
                     syncEngine?.startPolling()  // reset fast-poll to get fresh heartbeat
-                    unlock()
+                    if config.isSetup && config.isProfileSelected {
+                        healthData.refresh(config: config)  // warm Health tab before user taps it
+                    }
                 default:
                     break
                 }
@@ -85,13 +121,15 @@ struct BridgeApp: App {
 
         let context = LAContext()
         var error: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+        // deviceOwnerAuthentication = biometrics OR passcode fallback,
+        // so we always have a way in even if Face ID misfires.
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             isLocked = false
             isAuthenticating = false
             return
         }
         context.evaluatePolicy(
-            .deviceOwnerAuthenticationWithBiometrics,
+            .deviceOwnerAuthentication,
             localizedReason: "解锁 Mira"
         ) { success, _ in
             DispatchQueue.main.async {
@@ -121,6 +159,9 @@ struct BridgeApp: App {
         }
         BackgroundRefreshManager.shared.configure(config: config, store: store, notifications: notifications)
         BackgroundRefreshManager.shared.scheduleNextRefresh()
+
+        // Warm health data immediately so the Health tab is ready when first opened.
+        healthData.refresh(config: config)
     }
 }
 
@@ -159,7 +200,7 @@ struct MainTabView: View {
                     Label("Settings", systemImage: "gearshape")
                 }
         }
-        .tint(Color(hex: 0x00A884))
+        .tint(waAccent)
         .onChange(of: store.items) { _, newItems in
             notifications.processChanges(items: newItems)
         }
@@ -174,7 +215,7 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: 0x008069).ignoresSafeArea()
+            waListBg.ignoresSafeArea()
 
             VStack(spacing: 20) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
@@ -205,27 +246,35 @@ struct LockScreenView: View {
 
     var body: some View {
         ZStack {
-            Color(hex: 0x111B21).ignoresSafeArea()
+            waListBg.ignoresSafeArea()
 
             VStack(spacing: 24) {
                 Image(systemName: "faceid")
                     .font(.system(size: 56))
-                    .foregroundStyle(Color(hex: 0x00A884))
+                    .foregroundStyle(waAccent)
 
                 Text(agentName)
                     .font(.title2.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(waTextPri)
 
                 Button {
                     onUnlock()
                 } label: {
-                    Text("解锁")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 12)
-                        .background(Color(hex: 0x00A884), in: Capsule())
+                    Text("unlock")
+                        .font(.system(size: 13).monospaced())
+                        .foregroundStyle(waListBg)
+                        .tracking(0.5)
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 11)
+                        .background(waAccent, in: Capsule())
                 }
+            }
+        }
+        // Auto-trigger Face ID / passcode prompt when the lock screen appears,
+        // not just on scenePhase changes (which can miss programmatic launches).
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                onUnlock()
             }
         }
     }

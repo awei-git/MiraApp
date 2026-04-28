@@ -22,6 +22,13 @@ final class HealthDataProvider {
     var activityScore: HealthMetric?
     var activeMinutes: HealthMetric?
     var sleepScore: HealthMetric?
+    var temperatureDeviation: HealthMetric?
+    var sleepRecovery: HealthMetric?
+    var daytimeRecovery: HealthMetric?
+    var resilienceLevel: HealthMetric?
+    var respiratoryRate: HealthMetric?
+    var activeCalories: HealthMetric?
+    var restingHRLowest: HealthMetric?
 
     // Trends (30 days)
     var weightTrend: [(date: Date, value: Double)] = []
@@ -30,11 +37,14 @@ final class HealthDataProvider {
     var bodyFatTrend: [(date: Date, value: Double)] = []
     var bloodOxygenTrend: [(date: Date, value: Double)] = []
     var heartRateTrend: [(date: Date, value: Double)] = []
+    var sleepScoreTrend: [(date: Date, value: Double)] = []
+    var readinessTrend: [(date: Date, value: Double)] = []
 
     // Notes from bridge
     var notes: [HealthNote] = []
 
     var isLoading = false
+    var hasLoadedOnce = false
     var debugLog: String = ""
 
     struct HealthMetric {
@@ -82,19 +92,28 @@ final class HealthDataProvider {
         guard HKHealthStore.isHealthDataAvailable() else { return }
         isLoading = true
 
+        // Load bridge first (Oura is source of truth for sleep/readiness/etc.)
+        // Run on background queue so iCloud reads don't block UI.
+        Task.detached(priority: .userInitiated) { [weak self] in
+            self?.loadBridgeSummary(config: config)
+        }
+
         Task {
             let since30d = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
             let since7d = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
             let since24h = Calendar.current.date(byAdding: .hour, value: -24, to: Date())!
+            // Sleep window must cover last night even at late evening — use 36h.
+            let since36h = Calendar.current.date(byAdding: .hour, value: -36, to: Date())!
 
             // Latest values — use 7d window so data shows even if not measured today
             async let w = queryLastMetric(.bodyMass, unit: .gramUnit(with: .kilo), since: since7d)
-            async let s = querySleepMetric(since: since24h)
+            async let s = querySleepMetric(since: since36h)
             async let st = queryCumulativeMetric(.stepCount, unit: .count(), since: since24h)
             async let hr = queryLastMetric(.restingHeartRate, unit: HKUnit(from: "count/min"), since: since7d)
             async let bf = queryLastMetric(.bodyFatPercentage, unit: .percent(), since: since7d, multiply: 100)
             async let h = queryLastMetric(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), since: since7d)
             async let ox = queryLastMetric(.oxygenSaturation, unit: .percent(), since: since7d, multiply: 100)
+            async let rr = queryLastMetric(.respiratoryRate, unit: HKUnit(from: "count/min"), since: since7d)
 
             // Trends (30 days)
             async let wt = queryTrend(.bodyMass, unit: .gramUnit(with: .kilo), since: since30d)
@@ -102,30 +121,30 @@ final class HealthDataProvider {
             async let ht = queryTrend(.heartRateVariabilitySDNN, unit: .secondUnit(with: .milli), since: since30d)
             async let bft = queryTrend(.bodyFatPercentage, unit: .percent(), since: since30d, multiply: 100)
 
-            let (wVal, sVal, stVal, hrVal, bfVal, hVal, oxVal) = await (w, s, st, hr, bf, h, ox)
+            let (wVal, sVal, stVal, hrVal, bfVal, hVal, oxVal, rrVal) = await (w, s, st, hr, bf, h, ox, rr)
             let (wtVal, sltVal, htVal, bftVal) = await (wt, slt, ht, bft)
 
             await MainActor.run {
-                // Only overwrite if HealthKit has data (don't clobber bridge values)
+                // HealthKit fills only fields the bridge doesn't already cover, EXCEPT
+                // for sleep — bridge (Oura) is authoritative; HealthKit is fallback only.
                 if wVal != nil { self.weight = wVal }
-                if sVal != nil { self.sleepHours = sVal }
+                if let sV = sVal, self.sleepHours == nil { self.sleepHours = sV }  // bridge wins
                 if stVal != nil { self.steps = stVal }
                 if hrVal != nil { self.heartRate = hrVal }
                 if bfVal != nil { self.bodyFat = bfVal }
                 if hVal != nil { self.hrv = hVal }
                 if oxVal != nil { self.bloodOxygen = oxVal }
+                if let rrV = rrVal, self.respiratoryRate == nil { self.respiratoryRate = rrV }
 
                 if !wtVal.isEmpty { self.weightTrend = wtVal }
-                if !sltVal.isEmpty { self.sleepTrend = sltVal }
+                if !sltVal.isEmpty && self.sleepTrend.count < 2 { self.sleepTrend = sltVal }
                 if !htVal.isEmpty { self.hrvTrend = htVal }
                 if !bftVal.isEmpty { self.bodyFatTrend = bftVal }
 
                 self.isLoading = false
+                self.hasLoadedOnce = true
             }
         }
-
-        // Also load data from bridge summary (Oura API data, agent notes)
-        loadBridgeSummary(config: config)
     }
 
     // MARK: - HealthKit Queries
@@ -192,11 +211,39 @@ final class HealthDataProvider {
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
                     HKCategoryValueSleepAnalysis.asleepREM.rawValue,
                 ]
-                var total: TimeInterval = 0
+                // Group samples by source (Oura vs Apple Watch vs etc.) and pick the
+                // source with the largest total — avoids double-counting when multiple
+                // wearables write overlapping sleep data, and prevents undercounting
+                // when one source only logged a fragment.
+                var bySource: [String: [(Date, Date)]] = [:]
                 for s in samples where asleepValues.contains(s.value) {
-                    total += s.endDate.timeIntervalSince(s.startDate)
+                    let key = s.sourceRevision.source.bundleIdentifier
+                    bySource[key, default: []].append((s.startDate, s.endDate))
                 }
-                let hours = total / 3600.0
+                func mergedTotal(_ intervals: [(Date, Date)]) -> TimeInterval {
+                    let sorted = intervals.sorted { $0.0 < $1.0 }
+                    var total: TimeInterval = 0
+                    var curStart: Date? = nil
+                    var curEnd: Date? = nil
+                    for (s, e) in sorted {
+                        if let cs = curStart, let ce = curEnd, s <= ce {
+                            curEnd = max(ce, e)
+                            _ = cs  // keep
+                        } else {
+                            if let cs = curStart, let ce = curEnd {
+                                total += ce.timeIntervalSince(cs)
+                            }
+                            curStart = s
+                            curEnd = e
+                        }
+                    }
+                    if let cs = curStart, let ce = curEnd {
+                        total += ce.timeIntervalSince(cs)
+                    }
+                    return total
+                }
+                let best = bySource.values.map(mergedTotal).max() ?? 0
+                let hours = best / 3600.0
                 continuation.resume(returning: hours > 0 ? hours : nil)
             }
             store.execute(query)
@@ -259,56 +306,40 @@ final class HealthDataProvider {
     private func loadBridgeSummary(config: BridgeConfig) {
         guard let bridgeURL = config.bridgeURL,
               let profileId = config.profile?.id else {
-            debugLog = "no bridgeURL or profileId"
+            Task { @MainActor in self.debugLog = "no bridgeURL or profileId" }
             return
         }
         let url = bridgeURL.appending(path: "users/\(profileId)/health/health_summary.json")
-        debugLog = "path: \(url.path())\n"
-
         let fm = FileManager.default
-        let exists = fm.fileExists(atPath: url.path())
-        debugLog += "exists: \(exists)\n"
 
         // Trigger iCloud download
         try? fm.startDownloadingUbiquitousItem(at: url)
         let healthDir = bridgeURL.appending(path: "users/\(profileId)/health")
         try? fm.startDownloadingUbiquitousItem(at: healthDir)
 
-        // Check iCloud download status
-        if let vals = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]) {
-            debugLog += "iCloud status: \(vals.ubiquitousItemDownloadingStatus?.rawValue ?? "nil")\n"
-        }
-
-        guard let data = try? Data(contentsOf: url) else {
-            debugLog += "read FAILED — retrying in 3s...\n"
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                guard let self else { return }
-                // Re-check
-                let retryExists = fm.fileExists(atPath: url.path())
-                self.debugLog += "retry exists: \(retryExists)\n"
-                if let vals = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]) {
-                    self.debugLog += "retry iCloud: \(vals.ubiquitousItemDownloadingStatus?.rawValue ?? "nil")\n"
+        // Try up to 3 times with backoff, off the main thread.
+        Task.detached { [weak self] in
+            for delay in [0, 800, 2500] {
+                if delay > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
                 }
-                guard let data = try? Data(contentsOf: url) else {
-                    self.debugLog += "retry read FAILED"
+                if let data = try? Data(contentsOf: url) {
+                    self?.parseBridgeSummary(data: data, url: url)
                     return
                 }
-                self.debugLog += "retry OK (\(data.count) bytes)"
-                self.parseBridgeSummary(data: data)
             }
-            return
+            await MainActor.run {
+                self?.debugLog = "bridge read failed (no health_summary.json after retries)"
+            }
         }
-        debugLog += "read OK (\(data.count) bytes)"
-        parseBridgeSummary(data: data)
-
     }
 
-    private func parseBridgeSummary(data: Data) {
+    private func parseBridgeSummary(data: Data, url: URL) {
         let json: BridgeSummary
         do {
             json = try JSONDecoder().decode(BridgeSummary.self, from: data)
         } catch {
-            debugLog += "\nDECODE ERROR: \(error)"
+            Task { @MainActor in self.debugLog = "DECODE ERROR: \(error)" }
             return
         }
 
@@ -322,33 +353,43 @@ final class HealthDataProvider {
                 isoFull.date(from: s) ?? isoBasic.date(from: s) ?? Date()
             }
             guard let self else { return }
-            self.debugLog += "\nkeys: \(json.latest.keys.sorted().joined(separator: ", "))"
 
+            // Bridge (Oura) is authoritative for sleep, readiness, and Oura-only fields.
+            // For metrics also tracked by HealthKit, prefer the most recent.
             func assignIfNewer(_ current: inout HealthMetric?, _ incoming: HealthMetric) {
                 guard current == nil || incoming.date >= current!.date else { return }
+                current = incoming
+            }
+            func bridgeWins(_ current: inout HealthMetric?, _ incoming: HealthMetric) {
                 current = incoming
             }
 
             for (key, val) in json.latest {
                 let metric = HealthMetric(value: val.value, date: parseDate(val.date))
                 switch key {
-                case "weight":          assignIfNewer(&self.weight, metric)
-                case "sleep_hours":     assignIfNewer(&self.sleepHours, metric)
-                case "steps":           assignIfNewer(&self.steps, metric)
-                case "heart_rate":      assignIfNewer(&self.heartRate, metric)
-                case "body_fat":        assignIfNewer(&self.bodyFat, metric)
-                case "hrv":             assignIfNewer(&self.hrv, metric)
-                case "blood_oxygen":    assignIfNewer(&self.bloodOxygen, metric)
-                case "stress_high":     assignIfNewer(&self.stressHigh, metric)
-                case "recovery_high":   assignIfNewer(&self.recoveryHigh, metric)
-                case "readiness_score": assignIfNewer(&self.readinessScore, metric)
-                case "activity_score":  assignIfNewer(&self.activityScore, metric)
-                case "active_minutes":  assignIfNewer(&self.activeMinutes, metric)
-                case "sleep_score":     assignIfNewer(&self.sleepScore, metric)
+                case "weight":                 assignIfNewer(&self.weight, metric)
+                case "sleep_hours":            bridgeWins(&self.sleepHours, metric)
+                case "steps":                  assignIfNewer(&self.steps, metric)
+                case "heart_rate":             assignIfNewer(&self.heartRate, metric)
+                case "body_fat":               assignIfNewer(&self.bodyFat, metric)
+                case "hrv":                    bridgeWins(&self.hrv, metric)
+                case "blood_oxygen":           assignIfNewer(&self.bloodOxygen, metric)
+                case "stress_high":            bridgeWins(&self.stressHigh, metric)
+                case "recovery_high":          bridgeWins(&self.recoveryHigh, metric)
+                case "readiness_score":        bridgeWins(&self.readinessScore, metric)
+                case "activity_score":         bridgeWins(&self.activityScore, metric)
+                case "active_minutes":         bridgeWins(&self.activeMinutes, metric)
+                case "sleep_score":            bridgeWins(&self.sleepScore, metric)
+                case "temperature_deviation":  bridgeWins(&self.temperatureDeviation, metric)
+                case "sleep_recovery":         bridgeWins(&self.sleepRecovery, metric)
+                case "daytime_recovery":       bridgeWins(&self.daytimeRecovery, metric)
+                case "resilience_level":       bridgeWins(&self.resilienceLevel, metric)
+                case "respiratory_rate":       bridgeWins(&self.respiratoryRate, metric)
+                case "active_calories":        bridgeWins(&self.activeCalories, metric)
+                case "resting_hr_lowest":      bridgeWins(&self.restingHRLowest, metric)
                 default: break
                 }
             }
-            self.debugLog += "\nhr=\(self.heartRate?.value ?? -1) hrv=\(self.hrv?.value ?? -1) o2=\(self.bloodOxygen?.value ?? -1)"
 
             func bridgeTrend(_ key: String) -> [(date: Date, value: Double)] {
                 (json.trends[key] ?? []).map { p in
@@ -358,10 +399,11 @@ final class HealthDataProvider {
             if self.weightTrend.count < 2, let bt = json.trends["weight"], bt.count >= 2 {
                 self.weightTrend = bridgeTrend("weight")
             }
-            if self.sleepTrend.count < 2, let bt = json.trends["sleep_hours"], bt.count >= 2 {
+            // Sleep trend: bridge wins (Oura has full nightly totals)
+            if let bt = json.trends["sleep_hours"], bt.count >= 2 {
                 self.sleepTrend = bridgeTrend("sleep_hours")
             }
-            if self.hrvTrend.count < 2, let bt = json.trends["hrv"], bt.count >= 2 {
+            if let bt = json.trends["hrv"], bt.count >= 2 {
                 self.hrvTrend = bridgeTrend("hrv")
             }
             if self.bodyFatTrend.count < 2, let bt = json.trends["body_fat"], bt.count >= 2 {
@@ -373,8 +415,15 @@ final class HealthDataProvider {
             if self.heartRateTrend.count < 2, let bt = json.trends["heart_rate"], bt.count >= 2 {
                 self.heartRateTrend = bridgeTrend("heart_rate")
             }
+            if let bt = json.trends["sleep_score"], bt.count >= 2 {
+                self.sleepScoreTrend = bridgeTrend("sleep_score")
+            }
+            if let bt = json.trends["readiness_score"], bt.count >= 2 {
+                self.readinessTrend = bridgeTrend("readiness_score")
+            }
 
             self.notes = json.notes
+            self.hasLoadedOnce = true
         }
     }
 }

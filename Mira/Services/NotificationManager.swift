@@ -12,10 +12,21 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     var pendingDeepLinkItemId: String?
 
     private static let notifiedIdsKey = "Mira.Notifications.NotifiedIds"
+    private static let readIdsKey = "Mira.Notifications.ReadIds"
+    private static let readVersionsKey = "Mira.Notifications.ReadVersions"
 
     private var notifiedIds: Set<String> = []
     private var readIds: Set<String> = []
+    /// itemId → updatedAt-string at last read. If item.updatedAt has changed
+    /// since this snapshot, the item is unread again (handles stable-id feed
+    /// items that get overwritten with new content).
+    private var readVersions: [String: String] = [:]
     private var hasPrimedExistingFeedIds = false
+
+    func isUnread(itemId: String, currentVersion: String) -> Bool {
+        guard let v = readVersions[itemId] else { return true }
+        return v != currentVersion
+    }
 
     // MARK: - Category identifiers
 
@@ -111,8 +122,12 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         updateBadge()
     }
 
-    func markAsRead(_ itemId: String) {
+    func markAsRead(_ itemId: String, version: String = "") {
         readIds.insert(itemId)
+        if !version.isEmpty {
+            readVersions[itemId] = version
+        }
+        persistReadIds()
         _ = markNotified(itemId)
     }
 
@@ -280,9 +295,23 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private func loadPersistedNotificationState() {
         let storedIds = UserDefaults.standard.array(forKey: Self.notifiedIdsKey) as? [String] ?? []
         notifiedIds = Set(storedIds)
+        let storedRead = UserDefaults.standard.array(forKey: Self.readIdsKey) as? [String] ?? []
+        readIds = Set(storedRead)
+        let storedVersions = UserDefaults.standard.dictionary(forKey: Self.readVersionsKey) as? [String: String] ?? [:]
+        readVersions = storedVersions
     }
 
     private func persistNotificationState() {
         UserDefaults.standard.set(Array(notifiedIds), forKey: Self.notifiedIdsKey)
+    }
+
+    private func persistReadIds() {
+        let arr = Array(readIds).suffix(1000)
+        UserDefaults.standard.set(Array(arr), forKey: Self.readIdsKey)
+        // Cap versions dict
+        if readVersions.count > 1000 {
+            readVersions = Dictionary(uniqueKeysWithValues: readVersions.suffix(1000).map { ($0.key, $0.value) })
+        }
+        UserDefaults.standard.set(readVersions, forKey: Self.readVersionsKey)
     }
 }

@@ -9,8 +9,8 @@ struct HealthView: View {
     @Environment(BridgeConfig.self) private var config
     @Environment(ItemStore.self) private var store
     @Environment(CommandWriter.self) private var commands
+    @Environment(HealthDataProvider.self) private var healthData
     @State private var showInput = false
-    @State private var healthData = HealthDataProvider()
 
     var body: some View {
         NavigationStack {
@@ -18,7 +18,7 @@ struct HealthView: View {
                 waListBg.ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 18) {
                         if !healthData.isAuthorized {
                             HealthKitConnectBanner {
                                 Task {
@@ -26,57 +26,57 @@ struct HealthView: View {
                                     if ok { healthData.refresh(config: config) }
                                 }
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.top, 12)
                         }
 
-                        // Health alerts — top priority
                         HealthAlertBanner()
-                            .padding(.horizontal, 16)
-                            .padding(.top, 4)
-
-                        // Daily insight from GPT
                         HealthInsightCard()
-                            .padding(.horizontal, 16)
-
-                        // Dashboard cards — direct from HealthKit
                         HealthDashboard(data: healthData)
-                            .padding(.horizontal, 16)
-                            .padding(.top, healthData.isAuthorized ? 4 : 0)
-
-                        // Trend charts — direct from HealthKit
                         HealthTrendCharts(data: healthData)
-                            .padding(.horizontal, 16)
 
-                        // Recent notes (from agent via bridge)
                         if !healthData.notes.isEmpty {
                             HealthNotesSection(notes: healthData.notes)
-                                .padding(.horizontal, 16)
                         }
 
-                        // Health feed from bridge
                         HealthFeedSection()
                     }
-                    .padding(.bottom, 80)
+                    .padding(.top, 8)
+                    .padding(.bottom, 90)
                 }
 
                 Button { showInput = true } label: {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(Color(hex: 0x22C55E))
-                        .background(Circle().fill(waListBg).frame(width: 44, height: 44))
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(waListBg)
+                        .frame(width: 52, height: 52)
+                        .background(waAccent)
+                        .clipShape(Circle())
                 }
-                .padding(.trailing, 20)
-                .padding(.bottom, 16)
+                .padding(.trailing, 18)
+                .padding(.bottom, 14)
             }
-            .navigationTitle("Health")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("health")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(waTextPri)
+                        .tracking(0.3)
+                }
+            }
             .navigationDestination(for: String.self) { id in
                 ItemDetailView(itemId: id)
             }
             .sheet(isPresented: $showInput) {
                 HealthInputSheet(commands: commands)
             }
-            .onAppear { healthData.refresh(config: config) }
+            .onAppear {
+                // Provider is pre-warmed at app launch / scene-active; only refresh
+                // if it never loaded (cold path) so opening the tab is instant.
+                if !healthData.hasLoadedOnce {
+                    healthData.refresh(config: config)
+                }
+            }
             .refreshable { healthData.refresh(config: config) }
         }
     }
@@ -88,27 +88,31 @@ struct HealthKitConnectBanner: View {
     let onConnect: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "heart.circle")
-                .font(.title2)
-                .foregroundStyle(.red)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("连接 Apple Health")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(waTextPri)
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("connect apple health")
+                    .font(.system(size: 12).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(0.5)
                 Text("自动同步体重、睡眠、步数、心率")
-                    .font(.caption)
+                    .font(.system(size: 14))
                     .foregroundStyle(waTextSec)
             }
             Spacer()
-            Button("连接", action: onConnect)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14).padding(.vertical, 7)
-                .background(.red, in: Capsule())
+            Button(action: onConnect) {
+                Text("connect")
+                    .font(.system(size: 12).monospaced())
+                    .foregroundStyle(waListBg)
+                    .tracking(0.5)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(waAccent)
+            }
+            .buttonStyle(.plain)
         }
-        .padding(14)
-        .background(waCardBg, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(waCardBg)
     }
 }
 
@@ -140,139 +144,214 @@ struct HealthDashboard: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             if data.isLoading && data.weight == nil {
-                HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.8)
-                    Text("读取 Apple Health...")
-                        .font(.caption)
-                        .foregroundStyle(waTextSec)
+                HStack(spacing: 10) {
+                    ProgressView().scaleEffect(0.7).tint(waTextDim)
+                    Text("loading")
+                        .font(.system(size: 12).monospaced())
+                        .foregroundStyle(waTextDim)
+                        .tracking(0.5)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.vertical, 28)
+                .background(waCardBg)
             } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    DashCard(icon: "scalemass", label: "体重", value: fmt(data.weight), unit: "kg", dateLabel: dateLabel(data.weight), color: Color(hex: 0x4A9EFF))
-                    DashCard(icon: "moon.zzz", label: "睡眠", value: fmt(data.sleepHours), unit: "h", dateLabel: dateLabel(data.sleepHours), color: Color(hex: 0xA78BFA))
-                    DashCard(icon: "figure.walk", label: "步数", value: fmt(data.steps, decimals: 0), unit: "", dateLabel: dateLabel(data.steps), color: Color(hex: 0x22C55E))
-                    DashCard(icon: "heart", label: "心率", value: fmt(data.heartRate, decimals: 0), unit: "bpm", dateLabel: dateLabel(data.heartRate), color: Color(hex: 0xEF4444))
-                }
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    DashCard(icon: "percent", label: "体脂", value: fmt(data.bodyFat), unit: "%", dateLabel: dateLabel(data.bodyFat), color: Color(hex: 0xE8A838))
-                    DashCard(icon: "waveform.path.ecg", label: "HRV", value: fmt(data.hrv, decimals: 0), unit: "ms", dateLabel: dateLabel(data.hrv), color: Color(hex: 0x818CF8))
-                    DashCard(icon: "lungs", label: "血氧", value: fmt(data.bloodOxygen, decimals: 0), unit: "%", dateLabel: dateLabel(data.bloodOxygen), color: Color(hex: 0x38BDF8))
-                }
-                // Oura scores & activity
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    DashCard(icon: "gauge.with.dots.needle.33percent", label: "准备度", value: fmt(data.readinessScore, decimals: 0), unit: "", dateLabel: dateLabel(data.readinessScore), color: Color(hex: 0x34D399))
-                    DashCard(icon: "flame", label: "活动", value: fmt(data.activityScore, decimals: 0), unit: "", dateLabel: dateLabel(data.activityScore), color: Color(hex: 0xFB923C))
-                    DashCard(icon: "moon.stars", label: "睡眠分", value: fmt(data.sleepScore, decimals: 0), unit: "", dateLabel: dateLabel(data.sleepScore), color: Color(hex: 0xC084FC))
-                }
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    DashCard(icon: "bolt.heart", label: "压力", value: fmt(data.stressHigh, decimals: 0), unit: "min", dateLabel: dateLabel(data.stressHigh), color: Color(hex: 0xF87171))
-                    DashCard(icon: "leaf", label: "恢复", value: fmt(data.recoveryHigh, decimals: 0), unit: "min", dateLabel: dateLabel(data.recoveryHigh), color: Color(hex: 0x6EE7B7))
-                    DashCard(icon: "figure.run", label: "活动", value: fmt(data.activeMinutes, decimals: 0), unit: "min", dateLabel: dateLabel(data.activeMinutes), color: Color(hex: 0xFBBF24))
+                metricSection("vitals", rows: [
+                    [
+                        MetricSpec("sleep", fmt(data.sleepHours), "h", warn: data.sleepHours.map { $0.value < 6 } ?? false),
+                        MetricSpec("hrv", fmt(data.hrv, decimals: 0), "ms"),
+                        MetricSpec("rhr", fmt(data.heartRate, decimals: 0), "bpm"),
+                    ],
+                    [
+                        MetricSpec("spo2", fmt(data.bloodOxygen, decimals: 0), "%", warn: data.bloodOxygen.map { $0.value < 95 } ?? false),
+                        MetricSpec("breath", fmt(data.respiratoryRate, decimals: 1), "/min"),
+                        MetricSpec("weight", fmt(data.weight), "kg"),
+                    ],
+                ])
+
+                metricSection("oura scores", rows: [
+                    [
+                        MetricSpec("readiness", fmt(data.readinessScore, decimals: 0), "/100", warn: data.readinessScore.map { $0.value < 65 } ?? false),
+                        MetricSpec("sleep score", fmt(data.sleepScore, decimals: 0), "/100", warn: data.sleepScore.map { $0.value < 70 } ?? false),
+                        MetricSpec("activity", fmt(data.activityScore, decimals: 0), "/100"),
+                    ],
+                    [
+                        MetricSpec("temp dev.", fmt(data.temperatureDeviation, decimals: 0), "/100",
+                                   warn: data.temperatureDeviation.map { $0.value < 50 } ?? false,
+                                   alert: data.temperatureDeviation.map { $0.value < 30 } ?? false),
+                        MetricSpec("resilience", resilienceLabel(data.resilienceLevel?.value), "",
+                                   warn: data.resilienceLevel.map { $0.value <= 1 } ?? false),
+                        MetricSpec("body fat", fmt(data.bodyFat), "%"),
+                    ],
+                ])
+
+                metricSection("today", rows: [
+                    [
+                        MetricSpec("steps", fmt(data.steps, decimals: 0), ""),
+                        MetricSpec("active", fmt(data.activeMinutes, decimals: 0), "min"),
+                        MetricSpec("kcal", fmt(data.activeCalories, decimals: 0), ""),
+                    ],
+                    [
+                        MetricSpec("stress", fmt(data.stressHigh, decimals: 0), "min"),
+                        MetricSpec("recovery", fmt(data.recoveryHigh, decimals: 0), "min"),
+                        MetricSpec("sleep recov.", fmt(data.sleepRecovery, decimals: 0), ""),
+                    ],
+                ])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func metricSection(_ title: String, rows: [[MetricSpec]]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
+                .tracking(1.2)
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { rIdx, row in
+                    HStack(spacing: 0) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { cIdx, m in
+                            MetricCell(spec: m)
+                            if cIdx < row.count - 1 {
+                                Rectangle().fill(waBorder).frame(width: 0.5)
+                            }
+                        }
+                    }
+                    if rIdx < rows.count - 1 {
+                        Rectangle().fill(waBorder).frame(height: 0.5)
+                    }
                 }
             }
+            .background(waCardBg)
+        }
+    }
+
+    private func resilienceLabel(_ raw: Double?) -> String? {
+        guard let v = raw else { return nil }
+        switch Int(v.rounded()) {
+        case 1: return "limited"
+        case 2: return "adequate"
+        case 3: return "solid"
+        case 4: return "strong"
+        case 5: return "exceptional"
+        default: return String(format: "%.0f", v)
         }
     }
 }
 
-struct DashCard: View {
-    let icon: String
+struct MetricSpec {
     let label: String
     let value: String?
     let unit: String
-    var dateLabel: String? = nil
-    let color: Color
+    let warn: Bool
+    let alert: Bool
+    init(_ label: String, _ value: String?, _ unit: String, warn: Bool = false, alert: Bool = false) {
+        self.label = label
+        self.value = value
+        self.unit = unit
+        self.warn = warn
+        self.alert = alert
+    }
+}
+
+struct MetricCell: View {
+    let spec: MetricSpec
+
+    private var valueColor: Color {
+        if spec.alert { return waStatusAlert }
+        if spec.warn { return waStatusWarn }
+        return waTextPri
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.caption)
-                    .foregroundStyle(color)
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(waTextSec)
-            }
-            if let value {
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(value)
-                        .font(.title2.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(waTextPri)
-                    Text(unit)
-                        .font(.caption)
-                        .foregroundStyle(waTextSec)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(spec.label)
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
+                .tracking(0.5)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(spec.value ?? "—")
+                    .font(.system(size: 22, weight: .light).monospacedDigit())
+                    .foregroundStyle(valueColor)
+                if let _ = spec.value, !spec.unit.isEmpty {
+                    Text(spec.unit)
+                        .font(.system(size: 11))
+                        .foregroundStyle(waTextDim)
                 }
-                if let dateLabel {
-                    Text(dateLabel)
-                        .font(.caption2)
-                        .foregroundStyle(waTextSec.opacity(0.7))
-                }
-            } else {
-                Text("--")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(waTextSec.opacity(0.5))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 }
+
 
 // MARK: - Health Alert Banner
 
 struct HealthAlertBanner: View {
     @Environment(ItemStore.self) private var store
 
+    // Show all unread alerts from the last 3 days, freshest first.
+    // A single critical alert (e.g. Oura "major issue") can otherwise be hidden
+    // behind a more recent info-level item — surface them all.
     private var alerts: [MiraItem] {
-        store.items.filter {
-            $0.tags.contains("health") && $0.tags.contains("alert") && $0.status != .archived
+        let cutoff = Date().addingTimeInterval(-3 * 24 * 3600)
+        return store.items.filter {
+            $0.tags.contains("health") && $0.tags.contains("alert") &&
+            $0.status != .archived && $0.date >= cutoff
         }
         .sorted { $0.date > $1.date }
     }
 
-    @State private var selectedAlertId: String?
-
     var body: some View {
-        if let alert = alerts.first {
-            NavigationLink(value: alert.id) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.yellow)
-                        Text("健康提醒")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text(relativeDate(alert.date))
-                            .font(.caption2)
-                            .foregroundStyle(waTextSec)
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(waTextSec)
+        if !alerts.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(alerts.prefix(3).enumerated()), id: \.element.id) { idx, alert in
+                    NavigationLink(value: alert.id) {
+                        HStack(alignment: .top, spacing: 14) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 8) {
+                                    Circle().fill(waStatusAlert).frame(width: 6, height: 6)
+                                    Text("alert")
+                                        .font(.system(size: 11).monospaced())
+                                        .foregroundStyle(waStatusAlert)
+                                        .tracking(1.0)
+                                }
+                                Text(alert.lastMessagePreview)
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(waTextPri)
+                                    .lineLimit(4)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer(minLength: 8)
+                            Text(relativeDate(alert.date))
+                                .font(.system(size: 11).monospaced())
+                                .foregroundStyle(waTextDim)
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(waCardHi)
                     }
-
-                    Text(alert.lastMessagePreview)
-                        .font(.caption)
-                        .foregroundStyle(waTextPri)
-                        .lineLimit(6)
+                    .buttonStyle(.plain)
+                    if idx < alerts.prefix(3).count - 1 {
+                        Rectangle().fill(waBorder).frame(height: 0.5)
+                    }
                 }
-                .padding(12)
-                .background(Color(hex: 0x7C2D12).opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.orange.opacity(0.4), lineWidth: 1))
             }
-            .buttonStyle(.plain)
         }
     }
 
     private func relativeDate(_ date: Date) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) { return "今天" }
-        if cal.isDateInYesterday(date) { return "昨天" }
+        if cal.isDateInToday(date) { return "today" }
+        if cal.isDateInYesterday(date) { return "yesterday" }
         let f = DateFormatter(); f.dateFormat = "M/d"
         return f.string(from: date)
     }
@@ -294,26 +373,22 @@ struct HealthInsightCard: View {
     var body: some View {
         if let item = insight {
             NavigationLink(value: item.id) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "brain.head.profile")
-                            .foregroundStyle(Color(hex: 0x00A884))
-                        Text("今日健康洞察")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption2)
-                            .foregroundStyle(waTextSec)
-                    }
-
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("today's reading")
+                        .font(.system(size: 11).monospaced())
+                        .foregroundStyle(waTextDim)
+                        .tracking(1.2)
                     Text(item.lastMessagePreview)
-                        .font(.caption)
+                        .font(.system(size: 14))
                         .foregroundStyle(waTextPri)
                         .lineLimit(8)
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(3)
                 }
-                .padding(12)
-                .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(waCardHi)
             }
             .buttonStyle(.plain)
         }
@@ -326,25 +401,33 @@ struct HealthTrendCharts: View {
     let data: HealthDataProvider
 
     var body: some View {
-        VStack(spacing: 12) {
-            if data.weightTrend.count >= 2 {
-                MiniTrendChart(title: "体重趋势", unit: "kg", data: data.weightTrend, color: Color(hex: 0x4A9EFF))
+        VStack(alignment: .leading, spacing: 0) {
+            Text("trends · 30d")
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
+                .tracking(1.2)
+                .padding(.horizontal, 18)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
+            VStack(spacing: 0) {
+                let pairs: [(String, String, [(date: Date, value: Double)])] = [
+                    ("sleep", "h", data.sleepTrend),
+                    ("hrv", "ms", data.hrvTrend),
+                    ("readiness", "", data.readinessTrend),
+                    ("sleep score", "", data.sleepScoreTrend),
+                    ("rhr", "bpm", data.heartRateTrend),
+                    ("spo2", "%", data.bloodOxygenTrend),
+                    ("weight", "kg", data.weightTrend),
+                    ("body fat", "%", data.bodyFatTrend),
+                ].filter { $0.2.count >= 2 }
+                ForEach(Array(pairs.enumerated()), id: \.offset) { idx, pair in
+                    MiniTrendChart(title: pair.0, unit: pair.1, data: pair.2)
+                    if idx < pairs.count - 1 {
+                        Rectangle().fill(waBorder).frame(height: 0.5)
+                    }
+                }
             }
-            if data.sleepTrend.count >= 2 {
-                MiniTrendChart(title: "睡眠趋势", unit: "h", data: data.sleepTrend, color: Color(hex: 0xA78BFA))
-            }
-            if data.hrvTrend.count >= 2 {
-                MiniTrendChart(title: "HRV 趋势", unit: "ms", data: data.hrvTrend, color: Color(hex: 0x818CF8))
-            }
-            if data.bodyFatTrend.count >= 2 {
-                MiniTrendChart(title: "体脂趋势", unit: "%", data: data.bodyFatTrend, color: Color(hex: 0xE8A838))
-            }
-            if data.bloodOxygenTrend.count >= 2 {
-                MiniTrendChart(title: "血氧趋势", unit: "%", data: data.bloodOxygenTrend, color: Color(hex: 0x38BDF8))
-            }
-            if data.heartRateTrend.count >= 2 {
-                MiniTrendChart(title: "心率趋势", unit: "bpm", data: data.heartRateTrend, color: Color(hex: 0xEF4444))
-            }
+            .background(waCardBg)
         }
     }
 }
@@ -353,8 +436,8 @@ struct MiniTrendChart: View {
     let title: String
     let unit: String
     let data: [(date: Date, value: Double)]
-    let color: Color
 
+    private var latest: Double { data.last?.value ?? 0 }
     private var avg: Double {
         guard !data.isEmpty else { return 0 }
         return data.map(\.value).reduce(0, +) / Double(data.count)
@@ -364,50 +447,39 @@ struct MiniTrendChart: View {
         let values = data.map(\.value)
         guard let lo = values.min(), let hi = values.max() else { return 0...1 }
         let span = hi - lo
-        let padding = max(span * 0.15, 0.5) // at least 0.5 padding
+        let padding = max(span * 0.15, 0.5)
         return (lo - padding)...(hi + padding)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(waTextSec)
-                Spacer()
-                Text("均值 \(avg, specifier: "%.1f")\(unit)")
-                    .font(.caption2)
-                    .foregroundStyle(waTextSec)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(0.5)
+                Text(String(format: "%.1f%@", latest, unit))
+                    .font(.system(size: 18, weight: .light).monospacedDigit())
+                    .foregroundStyle(waTextPri)
+                Text(String(format: "avg %.1f", avg))
+                    .font(.system(size: 10).monospaced())
+                    .foregroundStyle(waTextDim)
             }
+            .frame(width: 90, alignment: .leading)
+
             Chart(data, id: \.date) { point in
                 LineMark(x: .value("Date", point.date), y: .value("Value", point.value))
-                    .foregroundStyle(color)
-                    .interpolationMethod(.catmullRom)
-                AreaMark(x: .value("Date", point.date), yStart: .value("Min", yRange.lowerBound), yEnd: .value("Value", point.value))
-                    .foregroundStyle(color.opacity(0.1))
-                    .interpolationMethod(.catmullRom)
-                PointMark(x: .value("Date", point.date), y: .value("Value", point.value))
-                    .foregroundStyle(color)
-                    .symbolSize(20)
+                    .foregroundStyle(waAccent)
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 1.2))
             }
             .chartYScale(domain: yRange)
-            .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
-                        .foregroundStyle(waTextSec)
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4]))
-                        .foregroundStyle(waTextSec.opacity(0.3))
-                    AxisValueLabel().foregroundStyle(waTextSec)
-                }
-            }
-            .frame(height: 100)
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .frame(height: 50)
         }
-        .padding(12)
-        .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
     }
 }
 
@@ -417,51 +489,42 @@ struct HealthNotesSection: View {
     let notes: [HealthNote]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("最近记录")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(waTextSec)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("recent notes")
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
+                .tracking(1.2)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 12)
 
-            VStack(spacing: 1) {
-                ForEach(notes.prefix(5)) { note in
-                    HStack(spacing: 10) {
-                        Image(systemName: noteIcon(note.category))
-                            .foregroundStyle(noteColor(note.category))
-                            .frame(width: 20)
-                        VStack(alignment: .leading, spacing: 1) {
+            VStack(spacing: 0) {
+                let preview = Array(notes.prefix(5))
+                ForEach(Array(preview.enumerated()), id: \.element.id) { idx, note in
+                    HStack(alignment: .top, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(note.category.lowercased())
+                                .font(.system(size: 11).monospaced())
+                                .foregroundStyle(waTextDim)
+                                .tracking(0.5)
                             Text(note.content)
-                                .font(.subheadline)
+                                .font(.system(size: 14))
                                 .foregroundStyle(waTextPri)
-                                .lineLimit(2)
-                            Text("\(note.date) · \(note.category)")
-                                .font(.caption2)
-                                .foregroundStyle(waTextSec)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
                         }
-                        Spacer()
+                        Spacer(minLength: 8)
+                        Text(note.date)
+                            .font(.system(size: 11).monospaced())
+                            .foregroundStyle(waTextDim)
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    if idx < preview.count - 1 {
+                        Rectangle().fill(waBorder).frame(height: 0.5)
+                    }
                 }
             }
-            .background(waCardBg, in: RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
-    private func noteIcon(_ category: String) -> String {
-        switch category {
-        case "symptom": return "stethoscope"
-        case "medication": return "pills"
-        case "exercise": return "figure.run"
-        case "diet": return "fork.knife"
-        default: return "note.text"
-        }
-    }
-
-    private func noteColor(_ category: String) -> Color {
-        switch category {
-        case "symptom": return Color(hex: 0xD97706)
-        case "medication": return Color(hex: 0x818CF8)
-        case "exercise": return Color(hex: 0x22C55E)
-        default: return waTextSec
+            .background(waCardBg)
         }
     }
 }
@@ -478,23 +541,27 @@ struct HealthFeedSection: View {
 
     var body: some View {
         if !healthItems.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("活动")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(waTextSec)
-                    .padding(.horizontal, 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("activity")
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(1.2)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 12)
 
-                VStack(spacing: 1) {
-                    ForEach(healthItems.prefix(10)) { item in
+                VStack(spacing: 0) {
+                    let recent = Array(healthItems.prefix(10))
+                    ForEach(Array(recent.enumerated()), id: \.element.id) { idx, item in
                         NavigationLink(value: item.id) {
                             HealthItemRow(item: item)
                         }
                         .buttonStyle(.plain)
+                        if idx < recent.count - 1 {
+                            Rectangle().fill(waBorder).frame(height: 0.5).padding(.leading, 18)
+                        }
                     }
                 }
                 .background(waCardBg)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .padding(.horizontal, 12)
             }
         }
     }
@@ -505,35 +572,60 @@ struct HealthFeedSection: View {
 struct HealthItemRow: View {
     let item: MiraItem
 
-    private var icon: String {
-        if item.title.contains("体重") || item.title.contains("weight") { return "scalemass" }
-        if item.title.contains("睡眠") || item.title.contains("sleep") { return "moon.zzz" }
-        if item.title.contains("步") || item.title.contains("step") { return "figure.walk" }
-        if item.title.contains("心率") || item.title.contains("heart") { return "heart" }
-        if item.title.contains("周报") || item.title.contains("report") { return "chart.bar.doc.horizontal" }
-        if item.title.contains("提醒") || item.tags.contains("alert") { return "exclamationmark.triangle" }
-        if item.tags.contains("symptom") { return "stethoscope" }
-        return "heart.text.clipboard"
-    }
-
-    private var iconColor: Color {
-        if item.title.contains("周报") { return Color(hex: 0x22C55E) }
-        if item.title.contains("提醒") || item.tags.contains("alert") { return Color(hex: 0xD97706) }
-        if item.tags.contains("symptom") { return Color(hex: 0xD97706) }
-        return Color(hex: 0x4A9EFF)
+    private var spec: (label: String, color: Color, icon: String) {
+        if item.tags.contains("alert") || item.title.contains("提醒") {
+            return ("alert", colorAlert, "exclamationmark.triangle.fill")
+        }
+        if item.tags.contains("symptom") {
+            return ("symptom", colorHealth, "stethoscope")
+        }
+        if item.tags.contains("report") || item.title.contains("周报") {
+            return ("report", colorAnalysis, "chart.bar.doc.horizontal")
+        }
+        if item.tags.contains("insight") {
+            return ("insight", colorWriting, "brain.head.profile")
+        }
+        return ("log", colorHealth, "heart.text.clipboard")
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon).foregroundStyle(iconColor).frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.title).font(.subheadline).foregroundStyle(waTextPri).lineLimit(1)
-                Text(item.lastMessagePreview).font(.caption).foregroundStyle(waTextSec).lineLimit(1)
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(spec.color)
+                    .frame(width: 38, height: 38)
+                Image(systemName: spec.icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(waListBg)
             }
-            Spacer()
-            Text(formatTime(item.date)).font(.caption2).foregroundStyle(waTextSec)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(spec.label)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(spec.color)
+                    .tracking(0.8)
+                Text(item.title)
+                    .font(.system(size: 15))
+                    .foregroundStyle(waTextPri)
+                    .lineLimit(1)
+                Text(item.lastMessagePreview)
+                    .font(.system(size: 12))
+                    .foregroundStyle(waTextSec)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            Spacer(minLength: 8)
+            Text(formatTime(item.date))
+                .font(.system(size: 11).monospaced())
+                .foregroundStyle(waTextDim)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(
+            ZStack {
+                waCardBg
+                spec.color.opacity(0.10)
+            }
+        )
     }
 
     private func formatTime(_ date: Date) -> String {
@@ -644,7 +736,7 @@ struct HealthInputSheet: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(Color(hex: 0x00A884))
+                        .foregroundStyle(waAccent)
 
                         if !checkupImages.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {

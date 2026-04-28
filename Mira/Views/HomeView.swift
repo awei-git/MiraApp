@@ -1,25 +1,91 @@
 import SwiftUI
 import MiraBridge
 
-// WhatsApp iOS dark mode — exact palette
-let waAccent    = Color(hex: 0x00A884) // teal green (brighter for dark)
-let waBadge     = Color(hex: 0x25D366) // whatsapp green — badges, online dot
-let waListBg    = Color(hex: 0x111B21) // dark charcoal bg
-let waCardBg    = Color(hex: 0x1F2C34) // card/row bg (slightly lighter)
-let waChatBg    = Color(hex: 0x0B141A) // chat wallpaper (darkest)
-let waOutBubble = Color(hex: 0x005C4B) // outgoing bubble (dark teal)
-let waInBubble  = Color(hex: 0x202C33) // incoming bubble (dark gray)
-let waTextPri   = Color(hex: 0xE9EDEF) // primary text (light)
-let waTextSec   = Color(hex: 0x8696A0) // secondary text (gray)
-let waLink      = Color(hex: 0x53BDEB) // in-chat links (brighter blue)
+// Mira palette — soft warm dark with bright pastel accents.
+let waListBg    = Color(hex: 0x1A1A22) // warm soft dark — not aggressive black
+let waCardBg    = Color(hex: 0x26262F) // surface — clearly lifted from bg
+let waCardHi    = Color(hex: 0x32323D) // surface elevated (insights / alerts)
+let waChatBg    = Color(hex: 0x14141B) // chat bg — one notch darker than list
+let waBorder    = Color(hex: 0x3A3A46) // hairline separator
+let waTextPri   = Color(hex: 0xF2F2EE) // warm white
+let waTextSec   = Color(hex: 0xA0A0AC) // soft cool gray
+let waTextDim   = Color(hex: 0x6E6E7A) // dimmed (timestamps, labels)
 
-// Feed type colors (generic — extend via tag-based mapping)
-let colorExplore   = Color(hex: 0x4A9EFF) // blue
-let colorAgent     = Color(hex: 0xE8A838) // warm gold (agent-generated)
-let colorRequest   = Color(hex: 0x818CF8) // indigo
-let colorDiscuss   = Color(hex: 0xA78BFA) // purple
-let colorAlert     = Color(hex: 0xD97706) // amber
-let colorAnalysis  = Color(hex: 0x22C55E) // green
+// Single accent — bright mint. Used for the FAB, active tab, focus only.
+let waAccent    = Color(hex: 0x8FE5B8)
+let waOutBubble = Color(hex: 0x2C4438) // outgoing bubble — deep mint shadow
+let waInBubble  = Color(hex: 0x1C1C20) // incoming bubble — surface
+let waLink      = Color(hex: 0xA8EBC8) // links — mint tint
+
+// Status — bright + cheerful. Coral for alerts, honey for warnings.
+let waStatusAlert = Color(hex: 0xFF9081) // coral — alerts / errors
+let waStatusWarn  = Color(hex: 0xFFCB6E) // honey — warnings
+let waStatusGood  = Color(hex: 0x8FE5B8) // mint — success / confirmation
+
+// Category palette — a bright, cheerful family. All colors sit at roughly
+// the same lightness (~76%) and chroma (~52). Distinct hues, equal visual
+// weight, alive in dark mode without being neon.
+let colorHealth    = Color(hex: 0xFF9081) // bright coral
+let colorAlert     = Color(hex: 0xFFA85C) // sunset orange
+let colorSocial    = Color(hex: 0x7FC4F0) // sky blue
+let colorWriting   = Color(hex: 0x8FE5B8) // fresh mint
+let colorAnalysis  = Color(hex: 0xFFCB6E) // golden honey
+let colorJournal   = Color(hex: 0xC7A8F0) // bright lilac
+let colorExplore   = Color(hex: 0x7DD8E0) // cyan
+let colorPodcast   = Color(hex: 0xFF9DBE) // rose
+let colorPhoto     = Color(hex: 0xFFB088) // peach
+let colorCode      = Color(hex: 0xA8B8FF) // periwinkle
+let colorAgent     = Color(hex: 0xF0D9A8) // warm cream
+let colorRequest   = Color(hex: 0xA0C8F0) // sky-slate
+let colorDiscuss   = Color(hex: 0xD4A0F0) // orchid
+
+private struct CategoryStyle {
+    let label: String
+    let color: Color
+    let icon: String
+}
+
+private func categoryStyle(for item: MiraItem) -> CategoryStyle {
+    let tags = Set(item.tags)
+    if !tags.isDisjoint(with: ["alert", "error", "crash"]) {
+        return .init(label: "alert", color: colorAlert, icon: "exclamationmark.triangle.fill")
+    }
+    if !tags.isDisjoint(with: ["symptom", "checkup"]) {
+        return .init(label: "health", color: colorHealth, icon: "stethoscope")
+    }
+    if !tags.isDisjoint(with: ["health", "insight"]) {
+        return .init(label: "health", color: colorHealth, icon: "heart")
+    }
+    if !tags.isDisjoint(with: ["podcast", "audio", "tts"]) {
+        return .init(label: "podcast", color: colorPodcast, icon: "waveform")
+    }
+    if !tags.isDisjoint(with: ["writing", "essay", "draft", "article"]) {
+        return .init(label: "writing", color: colorWriting, icon: "doc.text")
+    }
+    if !tags.isDisjoint(with: ["substack", "twitter", "bluesky", "growth", "social"]) {
+        return .init(label: "social", color: colorSocial, icon: "bubble.left")
+    }
+    if !tags.isDisjoint(with: ["journal", "reflect", "spark"]) {
+        return .init(label: "journal", color: colorJournal, icon: "moon.stars")
+    }
+    if !tags.isDisjoint(with: ["explore", "briefing", "news", "feed"]) {
+        return .init(label: "explore", color: colorExplore, icon: "globe")
+    }
+    if !tags.isDisjoint(with: ["analysis", "market", "research", "tetra"]) {
+        return .init(label: "analysis", color: colorAnalysis, icon: "chart.line.uptrend.xyaxis")
+    }
+    if !tags.isDisjoint(with: ["photo", "image", "video"]) {
+        return .init(label: "photo", color: colorPhoto, icon: "photo")
+    }
+    if !tags.isDisjoint(with: ["code", "pipeline", "infra", "agent-task"]) {
+        return .init(label: "code", color: colorCode, icon: "chevron.left.forwardslash.chevron.right")
+    }
+    switch item.type {
+    case .request:    return .init(label: "task",    color: colorRequest, icon: "arrow.up.circle")
+    case .discussion: return .init(label: "thread",  color: colorDiscuss, icon: "bubble.left.and.bubble.right")
+    case .feed:       return .init(label: "agent",   color: colorAgent,   icon: "doc.text")
+    }
+}
 
 // Convenience
 private let accentGreen = waAccent
@@ -61,19 +127,21 @@ struct HomeView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         // Search bar
-                        HStack {
+                        HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
-                                .foregroundStyle(.secondary)
-                            TextField("Search conversations...", text: $searchText)
-                                .font(.body)
+                                .font(.system(size: 14))
+                                .foregroundStyle(waTextDim)
+                            TextField("search", text: $searchText)
+                                .font(.system(size: 14))
                                 .foregroundStyle(waTextPri)
                         }
-                        .padding(12)
-                        .background(cardBg)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(warmBg)
+                        .background(cardBg)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
 
                         // Needs attention banner
                         if !store.needsAttention.isEmpty {
@@ -106,18 +174,21 @@ struct HomeView: View {
                             }
 
                             if isRecent || expandedSections.contains(group.key) {
-                                VStack(spacing: 1) {
-                                    ForEach(group.items) { item in
+                                VStack(spacing: 0) {
+                                    ForEach(Array(group.items.enumerated()), id: \.element.id) { idx, item in
                                         NavigationLink(value: item.id) {
                                             ChatListRow(item: item)
                                         }
                                         .buttonStyle(.plain)
+                                        if idx < group.items.count - 1 {
+                                            Divider()
+                                                .frame(height: 0.5)
+                                                .background(waBorder)
+                                                .padding(.leading, 18)
+                                        }
                                     }
                                 }
-                                .background(cardBg)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .padding(.horizontal, 12)
-                                .padding(.bottom, 8)
+                                .padding(.bottom, 18)
                             }
                         }
 
@@ -125,23 +196,29 @@ struct HomeView: View {
                     }
                 }
 
-                // FAB
+                // FAB — single accent, restrained
                 Button { showNewItem = true } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 54, height: 54)
-                        .background(accentGreen)
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(waListBg)
+                        .frame(width: 52, height: 52)
+                        .background(waAccent)
                         .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
                 }
-                .padding(.trailing, 16)
-                .padding(.bottom, 12)
+                .padding(.trailing, 18)
+                .padding(.bottom, 14)
             }
-            .navigationTitle(config.agentName)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    statusPill
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 8) {
+                        statusPill
+                        Text(config.agentName.lowercased())
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(waTextPri)
+                            .tracking(0.3)
+                    }
                 }
             }
             .navigationDestination(for: String.self) { id in
@@ -210,24 +287,25 @@ struct HomeView: View {
                 let bd = b.value.first?.date ?? .distantPast
                 return ad > bd
             }
-            .map { (key: $0.key, items: $0.value.sorted { $0.date > $1.date }) }
+            .map { (key: $0.key, items: $0.value.sorted { lhs, rhs in
+                // Pinned items always first, then by date desc
+                if lhs.pinned != rhs.pinned { return lhs.pinned }
+                return lhs.date > rhs.date
+            }) }
     }
 
     // MARK: - Date Separator
 
     private func dateSeparator(_ label: String, count: Int, expanded: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
-                Text(label)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(waTextPri)
+            HStack(spacing: 10) {
+                Text(label.lowercased())
+                    .font(.system(size: 11, weight: .regular).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(1.2)
                 Text("\(count)")
-                    .font(.caption)
-                    .foregroundStyle(waTextSec)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(waCardBg)
-                    .clipShape(Capsule())
+                    .font(.system(size: 11, weight: .regular).monospacedDigit())
+                    .foregroundStyle(waTextDim)
                 Spacer()
                 if label != "Today" && label != "Yesterday" {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -257,14 +335,14 @@ struct HomeView: View {
     }
 
     private var statusPill: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Circle()
-                .fill(sync.agentOnline ? accentGreen : .red)
-                .frame(width: 8, height: 8)
+                .fill(sync.agentOnline ? waAccent : waStatusAlert)
+                .frame(width: 6, height: 6)
             if let hb = sync.heartbeat, hb.isBusy {
                 Text("\(hb.activeCount ?? 0)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(accentGreen)
+                    .font(.system(size: 11, weight: .regular).monospacedDigit())
+                    .foregroundStyle(waAccent)
             }
         }
     }
@@ -276,32 +354,26 @@ struct AttentionBanner: View {
     let item: MiraItem
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.bubble.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(.orange)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 14) {
+            Circle().fill(waStatusWarn).frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 15))
+                    .foregroundStyle(waTextPri)
                     .lineLimit(1)
-                Text("Waiting for your reply")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                Text("waiting for your reply")
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waStatusWarn)
+                    .tracking(0.5)
             }
-
             Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            Image(systemName: "arrow.right")
+                .font(.system(size: 12, weight: .light))
+                .foregroundStyle(waTextDim)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(cardBg)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(waCardHi)
     }
 }
 
@@ -309,65 +381,86 @@ struct AttentionBanner: View {
 
 struct ChatListRow: View {
     let item: MiraItem
+    @Environment(NotificationManager.self) private var notifications
+
+    private var style: CategoryStyle { categoryStyle(for: item) }
+    private var isUnread: Bool {
+        notifications.isUnread(itemId: item.id, currentVersion: item.updatedAt)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Avatar with type-specific color
+        HStack(alignment: .top, spacing: 14) {
+            // Avatar — solid pastel block, dark icon for high contrast
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(itemColor.opacity(0.15))
-                    .frame(width: 48, height: 48)
-                Image(systemName: avatarIcon)
-                    .font(.system(size: 20))
-                    .foregroundStyle(itemColor)
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(style.color)
+                    .frame(width: 38, height: 38)
+                Image(systemName: style.icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(waListBg)
             }
 
-            // Content
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(item.title)
-                        .font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(waTextPri)
-                        .lineLimit(1)
-                    Spacer()
-                    Text(timeString)
-                        .font(.caption)
-                        .foregroundStyle(waTextSec)
-                }
-                HStack {
-                    if item.status == .working {
-                        HStack(spacing: 3) {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 12, height: 12)
-                            statusText
-                        }
-                    } else {
-                        previewText
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(style.label)
+                        .font(.system(size: 11, weight: .regular).monospaced())
+                        .foregroundStyle(style.color)
+                        .tracking(0.8)
+                    if item.status == .needsInput {
+                        Text("·  needs reply")
+                            .font(.system(size: 11).monospaced())
+                            .foregroundStyle(waStatusWarn)
                     }
-                    Spacer()
-                    badges
+                    if item.status == .failed {
+                        Text("·  failed")
+                            .font(.system(size: 11).monospaced())
+                            .foregroundStyle(waStatusAlert)
+                    }
+                    if item.pinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(waTextDim)
+                    }
+                }
+                Text(item.title)
+                    .font(.system(size: 15, weight: isUnread ? .semibold : .regular))
+                    .foregroundStyle(isUnread ? waTextPri : waTextSec)
+                    .lineLimit(1)
+                if item.status == .working {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.55)
+                            .frame(width: 10, height: 10)
+                        statusText
+                    }
+                } else {
+                    previewText
                 }
             }
+            Spacer(minLength: 8)
+            Text(timeString)
+                .font(.system(size: 11, weight: .regular).monospacedDigit())
+                .foregroundStyle(waTextDim)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(itemColor.opacity(0.03))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 13)
+        .background(
+            ZStack {
+                cardBg
+                style.color.opacity(0.18)
+            }
+        )
     }
 
     private var previewText: some View {
         Group {
             if let last = item.messages.last(where: { $0.kind != .statusCard }) {
-                if last.isAgent {
-                    Text("Agent: \(cleanPreview(last))")
-                } else {
-                    Text(cleanPreview(last))
-                }
+                Text(cleanPreview(last))
             }
         }
-        .font(.subheadline)
+        .font(.system(size: 13))
         .foregroundStyle(waTextSec)
-        .lineLimit(1)
+        .lineLimit(2)
     }
 
     private var statusText: some View {
@@ -376,34 +469,27 @@ struct ChatListRow: View {
                let card = last.statusCard {
                 Text(card.text)
             } else {
-                Text("Working...")
+                Text("working")
             }
         }
-        .font(.subheadline)
-        .foregroundStyle(.blue)
+        .font(.system(size: 13))
+        .foregroundStyle(waAccent)
         .lineLimit(1)
     }
 
     @ViewBuilder
     private var badges: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 6) {
             if item.pinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-            }
-            if item.status == .failed {
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(waTextDim)
             }
             if item.status == .needsInput {
-                Text("!")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 18, height: 18)
-                    .background(.orange)
-                    .clipShape(Circle())
+                Text("needs reply")
+                    .font(.system(size: 10, weight: .regular).monospaced())
+                    .foregroundStyle(waStatusWarn)
+                    .tracking(0.5)
             }
         }
     }
@@ -411,36 +497,6 @@ struct ChatListRow: View {
     private func cleanPreview(_ msg: ItemMessage) -> String {
         if msg.kind == .statusCard { return "" }
         return String(msg.content.prefix(100))
-    }
-
-    // Type/tag-specific color for the left accent
-    private var itemColor: Color {
-        // Check tags first for extensibility
-        let tags = Set(item.tags)
-        if !tags.isDisjoint(with: ["explore", "briefing", "news"]) { return colorExplore }
-        if !tags.isDisjoint(with: ["alert", "error", "crash"]) { return colorAlert }
-        if !tags.isDisjoint(with: ["analysis", "market", "research"]) { return colorAnalysis }
-        if item.origin == .agent && item.type == .feed { return colorAgent }
-        if item.type == .request { return colorRequest }
-        if item.type == .discussion { return colorDiscuss }
-        return waTextSec
-    }
-
-    private var avatarIcon: String {
-        let tags = Set(item.tags)
-        switch item.type {
-        case .request:
-            if item.status == .done { return "checkmark" }
-            if item.status == .failed { return "xmark" }
-            return "arrow.up.circle"
-        case .discussion: return "bubble.left.and.bubble.right"
-        case .feed:
-            if !tags.isDisjoint(with: ["explore", "briefing", "news"]) { return "globe" }
-            if !tags.isDisjoint(with: ["analysis", "market"]) { return "chart.line.uptrend.xyaxis" }
-            if !tags.isDisjoint(with: ["reflect", "journal"]) { return "brain.head.profile" }
-            if !tags.isDisjoint(with: ["alert", "error"]) { return "exclamationmark.triangle" }
-            return "doc.text"
-        }
     }
 
     private static let timeFormatter: DateFormatter = {

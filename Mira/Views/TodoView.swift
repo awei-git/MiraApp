@@ -7,61 +7,80 @@ struct TodoView: View {
     @State private var selectedId: String?
     @FocusState private var inputFocused: Bool
 
+    @State private var showStale = false
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottomTrailing) {
-                Color(hex: 0x111B21).ignoresSafeArea()
+                waListBg.ignoresSafeArea()
                     .onTapGesture { inputFocused = false }
 
-                VStack(spacing: 0) {
-                    // Input bar
-                    HStack(spacing: 8) {
-                        TextField("Add idea... (high: for urgent)", text: $newText)
-                            .textFieldStyle(.plain)
-                            .focused($inputFocused)
-                            .padding(10)
-                            .background(Color(hex: 0x1F2C34))
-                            .clipShape(RoundedRectangle(cornerRadius: 18))
-                            .onSubmit { addTodo() }
-                        Button { addTodo() } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(Color(hex: 0x00A884))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        // Input
+                        HStack(spacing: 10) {
+                            TextField("add (or \"high: ...\")", text: $newText)
+                                .textFieldStyle(.plain)
+                                .focused($inputFocused)
+                                .font(.system(size: 14))
+                                .foregroundStyle(waTextPri)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(waCardBg)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .onSubmit { addTodo() }
+                            Button { addTodo() } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundStyle(waListBg)
+                                    .frame(width: 36, height: 36)
+                                    .background(waAccent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .disabled(newText.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
-                        .disabled(newText.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
 
-                    // List
-                    List {
-                        if !store.pending.isEmpty {
-                            Section("Pending (\(store.pending.count))") {
-                                ForEach(store.pending) { todo in
-                                    TodoRow(todo: todo, selectedId: $selectedId)
+                        if !store.working.isEmpty {
+                            todoSection("working", count: activeWorking.count, items: activeWorking)
+                            if staleWorking.count > 0 {
+                                Button { showStale.toggle() } label: {
+                                    Text(showStale
+                                         ? "hide \(staleWorking.count) stale"
+                                         : "show \(staleWorking.count) stale")
+                                        .font(.system(size: 11).monospaced())
+                                        .foregroundStyle(waTextDim)
+                                        .tracking(1.2)
+                                        .padding(.horizontal, 18)
+                                        .padding(.vertical, 6)
+                                }
+                                if showStale {
+                                    todoSection("stale", count: staleWorking.count, items: staleWorking)
                                 }
                             }
                         }
-                        if !store.working.isEmpty {
-                            Section("Working (\(store.working.count))") {
-                                ForEach(store.working) { todo in
-                                    TodoRow(todo: todo, selectedId: $selectedId)
-                                }
-                            }
+                        if !store.pending.isEmpty {
+                            todoSection("pending", count: store.pending.count, items: store.pending)
                         }
                         if !store.done.isEmpty {
-                            Section("Done") {
-                                ForEach(store.done.prefix(10)) { todo in
-                                    TodoRow(todo: todo, selectedId: $selectedId)
-                                }
-                            }
+                            todoSection("done", count: min(10, store.done.count), items: Array(store.done.prefix(10)))
                         }
+
+                        Spacer(minLength: 80)
                     }
-                    .listStyle(.plain)
-                    .scrollDismissesKeyboard(.interactively)
                 }
             }
-            .navigationTitle("Todo")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("todo")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(waTextPri)
+                        .tracking(0.3)
+                }
+            }
             .sheet(isPresented: Binding(
                 get: { selectedId != nil },
                 set: { if !$0 { selectedId = nil } }
@@ -78,6 +97,42 @@ struct TodoView: View {
             }
             .refreshable { store.refresh() }
             .onAppear { store.refresh() }
+        }
+    }
+
+    // Working items split: anything with no createdAt OR older than 14d → stale
+    private var activeWorking: [MiraTodo] {
+        let cutoff = Date().addingTimeInterval(-14 * 24 * 3600)
+        return store.working.filter { $0.date >= cutoff && !$0.createdAt.isEmpty }
+    }
+    private var staleWorking: [MiraTodo] {
+        let cutoff = Date().addingTimeInterval(-14 * 24 * 3600)
+        return store.working.filter { $0.date < cutoff || $0.createdAt.isEmpty }
+    }
+
+    @ViewBuilder
+    private func todoSection(_ title: String, count: Int, items: [MiraTodo]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text(title)
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+                    .tracking(1.2)
+                Text("\(count)")
+                    .font(.system(size: 11).monospaced())
+                    .foregroundStyle(waTextDim)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 10)
+
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { idx, todo in
+                    TodoRow(todo: todo, selectedId: $selectedId)
+                    if idx < items.count - 1 {
+                        Rectangle().fill(waBorder).frame(height: 0.5).padding(.leading, 18)
+                    }
+                }
+            }
         }
     }
 
@@ -110,44 +165,59 @@ struct TodoRow: View {
 
     var body: some View {
         Button { selectedId = todo.id } label: {
-            HStack(spacing: 10) {
-                Text(priorityIcon)
-                    .font(.system(size: 16))
+            HStack(alignment: .top, spacing: 14) {
+                // Priority dot
+                Circle()
+                    .fill(priorityColor)
+                    .frame(width: 8, height: 8)
+                    .padding(.top, 7)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(todo.title)
-                        .font(.subheadline.weight(.medium))
-                        .lineLimit(2)
-                        .strikethrough(todo.status == "done")
-                        .foregroundStyle(todo.status == "done" ? .secondary : .primary)
-
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(todo.priority)
-                            .font(.caption2)
+                            .font(.system(size: 11).monospaced())
                             .foregroundStyle(priorityColor)
+                            .tracking(0.8)
                         if !todo.followups.isEmpty {
-                            Text("\(todo.followups.count) 💬")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                            Text("·  \(todo.followups.count) note\(todo.followups.count == 1 ? "" : "s")")
+                                .font(.system(size: 11).monospaced())
+                                .foregroundStyle(waTextDim)
                         }
-                        Text(relativeTime)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
                     }
+                    Text(todo.title)
+                        .font(.system(size: 15))
+                        .foregroundStyle(todo.status == "done" ? waTextDim : waTextPri)
+                        .strikethrough(todo.status == "done")
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(3)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                if todo.status != "done" {
-                    Button {
-                        store.complete(todo.id)
-                    } label: {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundStyle(Color(hex: 0x00A884))
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(relativeTime)
+                        .font(.system(size: 11).monospaced())
+                        .foregroundStyle(waTextDim)
+                    if todo.status != "done" {
+                        Button {
+                            store.complete(todo.id)
+                        } label: {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(waListBg)
+                                .frame(width: 22, height: 22)
+                                .background(waAccent)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                ZStack { waCardBg; priorityColor.opacity(0.10) }
+            )
         }
         .buttonStyle(.plain)
         .swipeActions(edge: .trailing) {
@@ -168,23 +238,16 @@ struct TodoRow: View {
         }
     }
 
-    private var priorityIcon: String {
-        switch todo.priority {
-        case "high": return "🔴"
-        case "low": return "🟢"
-        default: return "🟡"
-        }
-    }
-
     private var priorityColor: Color {
         switch todo.priority {
-        case "high": return .red
-        case "low": return .green
-        default: return .yellow
+        case "high":   return colorAlert      // sunset orange
+        case "low":    return colorWriting    // mint
+        default:       return colorAnalysis   // honey
         }
     }
 
     private var relativeTime: String {
+        if todo.createdAt.isEmpty { return "—" }
         let s = Date().timeIntervalSince(todo.date)
         if s < 60 { return "now" }
         if s < 3600 { return "\(Int(s / 60))m" }
@@ -260,7 +323,7 @@ struct TodoDetailSheet: View {
                                             if fu.source == "agent" {
                                                 Text("Agent")
                                                     .font(.system(size: 11))
-                                                    .foregroundStyle(Color(hex: 0x00A884))
+                                                    .foregroundStyle(waAccent)
                                             }
                                             Text(fu.date, style: .time)
                                                 .font(.system(size: 11))
@@ -297,7 +360,7 @@ struct TodoDetailSheet: View {
                             } label: {
                                 Image(systemName: "arrow.up.circle.fill")
                                     .font(.title2)
-                                    .foregroundStyle(replyText.isEmpty ? Color(hex: 0x8696A0) : Color(hex: 0x00A884))
+                                    .foregroundStyle(replyText.isEmpty ? waTextSec : waAccent)
                             }
                             .disabled(replyText.isEmpty)
                         }
@@ -315,7 +378,7 @@ struct TodoDetailSheet: View {
                         ToolbarItem(placement: .primaryAction) {
                             Button { store.complete(todoId); dismiss() } label: {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(Color(hex: 0x00A884))
+                                    .foregroundStyle(waAccent)
                             }
                         }
                     }
