@@ -5,6 +5,7 @@ import SafariServices
 struct ItemDetailView: View {
     let itemId: String
     @Environment(ItemStore.self) private var store
+    @Environment(SyncEngine.self) private var sync
     @Environment(CommandWriter.self) private var commands
     @Environment(NotificationManager.self) private var notifications
     @State private var replyText = ""
@@ -88,7 +89,10 @@ struct ItemDetailView: View {
             .sheet(item: $safariURL) { url in
                 SafariView(url: url).ignoresSafeArea()
             }
-            .onAppear { notifications.markAsRead(itemId, version: item.updatedAt) }
+            .onAppear {
+                notifications.markAsRead(itemId, version: item.updatedAt)
+                sync.refreshDetail(itemId: itemId)
+            }
         } else {
             ContentUnavailableView("Item not found",
                                    systemImage: "questionmark.circle",
