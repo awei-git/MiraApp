@@ -102,6 +102,7 @@ struct BridgeApp: App {
                     BackgroundRefreshManager.shared.scheduleNextRefresh()
                 case .active:
                     syncEngine?.startPolling()  // reset fast-poll to get fresh heartbeat
+                    Task { await HealthExporter.shared.export(config: config) }
                 default:
                     break
                 }
@@ -155,6 +156,7 @@ struct BridgeApp: App {
         }
         BackgroundRefreshManager.shared.configure(config: config, store: store, notifications: notifications)
         BackgroundRefreshManager.shared.scheduleNextRefresh()
+        Task { await HealthExporter.shared.export(config: config, force: true) }
 
     }
 }

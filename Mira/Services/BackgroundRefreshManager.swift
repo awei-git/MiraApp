@@ -58,14 +58,9 @@ final class BackgroundRefreshManager {
         engine.refresh {
             notifications.processChanges(items: store.items)
 
-            // Export Apple Health data to bridge (daily)
-            if let bridgeURL = config.bridgeURL {
-                let personId = config.profile?.id ?? "ang"
-                Task {
-                    await HealthExporter.shared.exportToBridge(bridgeURL: bridgeURL, personId: personId)
-                    task.setTaskCompleted(success: true)
-                }
-            } else {
+            // Export Apple Health through API first, with iCloud bridge fallback.
+            Task {
+                await HealthExporter.shared.export(config: config)
                 task.setTaskCompleted(success: true)
             }
         }

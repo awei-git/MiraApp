@@ -1,5 +1,6 @@
 import Foundation
 import HealthKit
+import MiraBridge
 
 /// Exports Apple Health data to the iCloud bridge for the health agent to consume.
 /// Runs on background refresh — writes JSON to bridge/users/{id}/health/
@@ -8,6 +9,8 @@ final class HealthExporter {
 
     private let store = HKHealthStore()
     private var authorized = false
+    private var lastExportAt: Date?
+    private var exportInFlight = false
 
     private init() {}
 
@@ -55,15 +58,45 @@ final class HealthExporter {
 
     // MARK: - Export
 
-    /// Export last 24h of health data to a JSON file at the given bridge URL.
+    /// Export recent HealthKit data. API is primary; iCloud JSON remains a fallback.
+    func export(config: BridgeConfig, force: Bool = false) async {
+        let personId = config.profile?.id ?? "ang"
+        if exportInFlight {
+            return
+        }
+        if !force, let lastExportAt, Date().timeIntervalSince(lastExportAt) < 30 * 60 {
+            return
+        }
+        exportInFlight = true
+        defer { exportInFlight = false }
+        guard let export = await buildExport(personId: personId) else { return }
+        if await postToAPI(config: config, export: export, personId: personId) {
+            lastExportAt = Date()
+            return
+        }
+        if let bridgeURL = config.bridgeURL {
+            writeToBridge(bridgeURL: bridgeURL, personId: personId, export: export)
+            lastExportAt = Date()
+        }
+    }
+
+    /// Export recent HealthKit data to a JSON file at the given bridge URL.
     func exportToBridge(bridgeURL: URL, personId: String) async {
+        guard let export = await buildExport(personId: personId) else { return }
+        writeToBridge(bridgeURL: bridgeURL, personId: personId, export: export)
+    }
+
+    private func buildExport(personId: String) async -> [String: Any]? {
         if !authorized {
             let ok = await requestAuthorization()
-            guard ok else { return }
+            guard ok else { return nil }
         }
 
         var metrics: [[String: Any]] = []
-        let since = Calendar.current.date(byAdding: .hour, value: -24, to: Date())!
+        let now = Date()
+        let todayStart = Calendar.current.startOfDay(for: now)
+        let since = Calendar.current.date(byAdding: .hour, value: -72, to: Date())!
+        let workoutSince = Calendar.current.date(byAdding: .day, value: -7, to: Date())!
 
         // Weight (last reading)
         if let weight = await queryLastSample(.bodyMass, since: since) {
@@ -75,25 +108,14 @@ final class HealthExporter {
             ])
         }
 
-        // Sleep (total hours last night)
-        let sleepHours = await querySleepHours(since: since)
-        if sleepHours > 0 {
-            metrics.append([
-                "type": "sleep_hours",
-                "value": sleepHours,
-                "unit": "hours",
-                "date": ISO8601DateFormatter.shared.string(from: since),
-            ])
-        }
-
         // Steps (total today)
-        let steps = await queryCumulativeStat(.stepCount, since: since)
+        let steps = await queryCumulativeStat(.stepCount, since: todayStart)
         if steps > 0 {
             metrics.append([
                 "type": "steps",
                 "value": steps,
                 "unit": "count",
-                "date": ISO8601DateFormatter.shared.string(from: since),
+                "date": ISO8601DateFormatter.shared.string(from: todayStart),
             ])
         }
 
@@ -108,13 +130,13 @@ final class HealthExporter {
         }
 
         // Active energy
-        let energy = await queryCumulativeStat(.activeEnergyBurned, since: since)
+        let energy = await queryCumulativeStat(.activeEnergyBurned, since: todayStart)
         if energy > 0 {
             metrics.append([
                 "type": "active_energy",
                 "value": energy,
                 "unit": "kcal",
-                "date": ISO8601DateFormatter.shared.string(from: since),
+                "date": ISO8601DateFormatter.shared.string(from: todayStart),
             ])
         }
 
@@ -161,18 +183,18 @@ final class HealthExporter {
                 "date": ISO8601DateFormatter.shared.string(from: spo2.startDate),
             ])
         }
-        let exerciseMin = await queryCumulativeStat(.appleExerciseTime, since: since)
+        let exerciseMin = await queryCumulativeStat(.appleExerciseTime, since: todayStart)
         if exerciseMin > 0 {
             metrics.append([
                 "type": "exercise_minutes",
                 "value": exerciseMin,
                 "unit": "min",
-                "date": ISO8601DateFormatter.shared.string(from: since),
+                "date": ISO8601DateFormatter.shared.string(from: todayStart),
             ])
         }
 
         // Workouts (Apple Fitness / any workout app)
-        let workouts = await queryWorkouts(since: since)
+        let workouts = await queryWorkouts(since: workoutSince)
         for w in workouts {
             metrics.append(w)
         }
@@ -203,14 +225,16 @@ final class HealthExporter {
             ])
         }
 
-        guard !metrics.isEmpty else { return }
+        guard !metrics.isEmpty else { return nil }
 
-        let export: [String: Any] = [
+        return [
             "export_date": ISO8601DateFormatter.shared.string(from: Date()),
             "person_id": personId,
             "metrics": metrics,
         ]
+    }
 
+    private func writeToBridge(bridgeURL: URL, personId: String, export: [String: Any]) {
         // Write to bridge
         let healthDir = bridgeURL.appending(path: "users/\(personId)/health")
         try? FileManager.default.createDirectory(at: healthDir, withIntermediateDirectories: true)
@@ -220,12 +244,35 @@ final class HealthExporter {
             let data = try JSONSerialization.data(withJSONObject: export, options: [.prettyPrinted, .sortedKeys])
             try data.write(to: fileURL, options: .atomic)
             #if DEBUG
-            print("[HealthExporter] wrote \(metrics.count) metrics to bridge")
+            let count = (export["metrics"] as? [[String: Any]])?.count ?? 0
+            print("[HealthExporter] wrote \(count) metrics to bridge")
             #endif
         } catch {
             #if DEBUG
             print("[HealthExporter] write failed: \(error)")
             #endif
+        }
+    }
+
+    private func postToAPI(config: BridgeConfig, export: [String: Any], personId: String) async -> Bool {
+        guard JSONSerialization.isValidJSONObject(export),
+              let body = try? JSONSerialization.data(withJSONObject: export, options: []) else {
+            return false
+        }
+        config.startServerDiscovery()
+        let base = config.serverURL ?? BridgeConfig.defaultServerURL
+        let url = base.appending(path: "api/\(personId)/health/export")
+        var request = URLRequest(url: url, timeoutInterval: 5)
+        request.httpMethod = "POST"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        do {
+            let (_, response) = try await MiraPinnedURLSession.shared.data(for: request)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return (200..<300).contains(code)
+        } catch {
+            return false
         }
     }
 
@@ -252,7 +299,15 @@ final class HealthExporter {
         return await withCheckedContinuation { continuation in
             let query = HKStatisticsQuery(quantityType: quantityType, quantitySamplePredicate: predicate,
                                            options: .cumulativeSum) { _, stats, _ in
-                let unit: HKUnit = type == .stepCount ? .count() : .kilocalorie()
+                let unit: HKUnit
+                switch type {
+                case .stepCount:
+                    unit = .count()
+                case .appleExerciseTime:
+                    unit = .minute()
+                default:
+                    unit = .kilocalorie()
+                }
                 let value = stats?.sumQuantity()?.doubleValue(for: unit) ?? 0
                 continuation.resume(returning: value)
             }
@@ -266,7 +321,7 @@ final class HealthExporter {
 
         return await withCheckedContinuation { continuation in
             let query = HKSampleQuery(sampleType: .workoutType(), predicate: predicate,
-                                       limit: 10, sortDescriptors: [sort]) { _, results, _ in
+                                       limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, results, _ in
                 guard let workouts = results as? [HKWorkout] else {
                     continuation.resume(returning: [])
                     return
@@ -276,6 +331,8 @@ final class HealthExporter {
                     let duration = w.duration / 60.0 // minutes
                     let energy = w.statistics(for: HKQuantityType(.activeEnergyBurned))?
                         .sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                    let distance = w.statistics(for: HKQuantityType(.distanceWalkingRunning))?
+                        .sumQuantity()?.doubleValue(for: .meter()) ?? 0
                     return [
                         "type": "workout",
                         "value": duration,
@@ -283,6 +340,7 @@ final class HealthExporter {
                         "date": ISO8601DateFormatter.shared.string(from: w.startDate),
                         "activity": activityName,
                         "calories": energy,
+                        "distance": distance,
                     ] as [String: Any]
                 }
                 continuation.resume(returning: mapped)
@@ -294,6 +352,7 @@ final class HealthExporter {
     private static func workoutName(_ type: HKWorkoutActivityType) -> String {
         switch type {
         case .running: return "跑步"
+        case .soccer: return "足球"
         case .walking: return "步行"
         case .cycling: return "骑行"
         case .swimming: return "游泳"
