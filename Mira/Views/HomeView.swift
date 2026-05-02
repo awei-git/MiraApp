@@ -125,7 +125,7 @@ struct HomeView: View {
                 warmBg.ignoresSafeArea()
 
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    VStack(spacing: 0) {
                         // Search bar
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
@@ -145,7 +145,7 @@ struct HomeView: View {
 
                         // Needs attention banner
                         if !store.needsAttention.isEmpty {
-                            LazyVStack(spacing: 0) {
+                            VStack(spacing: 0) {
                                 ForEach(store.needsAttention) { item in
                                     NavigationLink(value: item.id) {
                                         AttentionBanner(item: item)
@@ -174,7 +174,7 @@ struct HomeView: View {
                             }
 
                             if isRecent || expandedSections.contains(group.key) {
-                                LazyVStack(spacing: 0) {
+                                VStack(spacing: 0) {
                                     ForEach(Array(group.items.enumerated()), id: \.element.id) { idx, item in
                                         NavigationLink(value: item.id) {
                                             ChatListRow(item: item)

@@ -102,9 +102,6 @@ struct BridgeApp: App {
                     BackgroundRefreshManager.shared.scheduleNextRefresh()
                 case .active:
                     syncEngine?.startPolling()  // reset fast-poll to get fresh heartbeat
-                    if config.isSetup && config.isProfileSelected {
-                        healthData.refresh(config: config)  // warm Health tab before user taps it
-                    }
                 default:
                     break
                 }
@@ -159,11 +156,6 @@ struct BridgeApp: App {
         BackgroundRefreshManager.shared.configure(config: config, store: store, notifications: notifications)
         BackgroundRefreshManager.shared.scheduleNextRefresh()
 
-        // Warm secondary tabs after the first frame; HealthKit + iCloud reads
-        // should never compete with launch rendering.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            healthData.refresh(config: config)
-        }
     }
 }
 
@@ -173,6 +165,7 @@ struct MainTabView: View {
     @Environment(SyncEngine.self) private var sync
     @Environment(ItemStore.self) private var store
     @Environment(NotificationManager.self) private var notifications
+    @State private var notificationTask: Task<Void, Never>?
 
     var body: some View {
         TabView {
@@ -204,7 +197,12 @@ struct MainTabView: View {
         }
         .tint(waAccent)
         .onChange(of: store.items) { _, newItems in
-            notifications.processChanges(items: newItems)
+            notificationTask?.cancel()
+            notificationTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                guard !Task.isCancelled else { return }
+                notifications.processChanges(items: newItems)
+            }
         }
     }
 }
