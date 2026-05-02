@@ -75,7 +75,6 @@ struct BridgeApp: App {
                         .environment(engine)
                         .environment(cmds)
                         .environment(healthData)
-                        .onAppear { engine.startPolling() }
                         .transition(.opacity)
                 } else if config.isProfileSelected {
                     ProgressView("Loading...")
@@ -143,7 +142,6 @@ struct BridgeApp: App {
 
     private func startServices() {
         guard syncEngine == nil else { return }
-        store.loadFromCache()
         let cmd = CommandWriter(config: config, store: store)
         let engine = SyncEngine(config: config, store: store)
         let todos = TodoStore(config: config)
@@ -153,15 +151,19 @@ struct BridgeApp: App {
         syncEngine = engine
         notifications.agentName = config.agentName
         engine.startPolling()
-        todos.refresh()
+        store.loadFromCacheAsync()
+        todos.refreshAsync()
         notifications.onApproval = { itemId, approved in
             cmd.reply(to: itemId, content: approved ? "Approved" : "Rejected")
         }
         BackgroundRefreshManager.shared.configure(config: config, store: store, notifications: notifications)
         BackgroundRefreshManager.shared.scheduleNextRefresh()
 
-        // Warm health data immediately so the Health tab is ready when first opened.
-        healthData.refresh(config: config)
+        // Warm secondary tabs after the first frame; HealthKit + iCloud reads
+        // should never compete with launch rendering.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            healthData.refresh(config: config)
+        }
     }
 }
 

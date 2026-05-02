@@ -22,6 +22,23 @@ final class TodoStore {
         todos = decoded
     }
 
+    func refreshAsync() {
+        guard let url = config.todosURL else { return }
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            let decoded: [MiraTodo]
+            if let data = try? Data(contentsOf: url),
+               let todos = try? JSONDecoder().decode([MiraTodo].self, from: data) {
+                decoded = todos
+            } else {
+                decoded = []
+            }
+            DispatchQueue.main.async {
+                self?.todos = decoded
+            }
+        }
+    }
+
     // MARK: - Write
 
     func add(title: String, priority: String = "medium") {
@@ -93,4 +110,3 @@ final class TodoStore {
         ISO8601DateFormatter.shared.string(from: Date())
     }
 }
-
