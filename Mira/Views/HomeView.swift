@@ -117,7 +117,7 @@ struct HomeView: View {
     @State private var debouncedSearchText = ""
     @State private var expandedSections: Set<String> = ["Today", "Yesterday"]
     @State private var cachedGroupedItems: [(key: String, items: [MiraItem])] = []
-    @State private var lastFilteredItems: [MiraItem] = []
+    @State private var lastFilteredSignature: [String] = []
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -125,7 +125,7 @@ struct HomeView: View {
                 warmBg.ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         // Search bar
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
@@ -145,7 +145,7 @@ struct HomeView: View {
 
                         // Needs attention banner
                         if !store.needsAttention.isEmpty {
-                            VStack(spacing: 0) {
+                            LazyVStack(spacing: 0) {
                                 ForEach(store.needsAttention) { item in
                                     NavigationLink(value: item.id) {
                                         AttentionBanner(item: item)
@@ -174,7 +174,7 @@ struct HomeView: View {
                             }
 
                             if isRecent || expandedSections.contains(group.key) {
-                                VStack(spacing: 0) {
+                                LazyVStack(spacing: 0) {
                                     ForEach(Array(group.items.enumerated()), id: \.element.id) { idx, item in
                                         NavigationLink(value: item.id) {
                                             ChatListRow(item: item)
@@ -249,9 +249,9 @@ struct HomeView: View {
 
     private func recomputeGroupedItems() {
         let items = filteredItems
-        // Skip if the underlying data hasn't changed
-        guard items != lastFilteredItems else { return }
-        lastFilteredItems = items
+        let signature = items.map { "\($0.id)|\($0.updatedAt)|\($0.status.rawValue)|\($0.pinned)" }
+        guard signature != lastFilteredSignature else { return }
+        lastFilteredSignature = signature
         cachedGroupedItems = Self.computeGroupedItems(from: items)
     }
 
@@ -322,16 +322,15 @@ struct HomeView: View {
     // MARK: - Grouping
 
     private var filteredItems: [MiraItem] {
-        let base: [MiraItem]
         if debouncedSearchText.isEmpty {
             let tenDaysAgo = Calendar.current.date(byAdding: .day, value: -10,
                                                     to: Calendar.current.startOfDay(for: Date()))!
-            base = store.allVisible.filter { $0.createdDate >= tenDaysAgo }
+            return store.items.filter {
+                $0.status != .archived && $0.type != .request && $0.createdDate >= tenDaysAgo
+            }
         } else {
-            base = store.search(debouncedSearchText)
+            return store.search(debouncedSearchText).filter { $0.type != .request }
         }
-        // Exclude request (todo/task) items — they're shown in the todo card
-        return base.filter { $0.type != .request }
     }
 
     private var statusPill: some View {
