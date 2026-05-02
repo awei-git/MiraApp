@@ -209,7 +209,7 @@ struct MessageBubble: View {
         let serverBase = config.serverURL ?? BridgeConfig.defaultServerURL
         let profileId = config.profile?.id ?? "ang"
         let httpURL = serverBase.appending(path: "/api/\(profileId)/artifacts/\(path)")
-        if let (data, response) = try? await URLSession.shared.data(from: httpURL),
+        if let (data, response) = try? await MiraPinnedURLSession.shared.data(from: httpURL),
            (response as? HTTPURLResponse)?.statusCode == 200,
            let img = UIImage(data: data) {
             loadedImage = img

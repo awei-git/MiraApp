@@ -22,6 +22,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 22) {
                         agentSection
                         dataSection
+                        apiSection
                         profileSection
                         workspaceSection
                         if let error = config.error { errorSection(error) }
@@ -90,6 +91,16 @@ struct SettingsView: View {
             kvRow("active", value: "\(store.activeRequests.count)")
             kvRow("discussions", value: "\(store.discussions.count)")
             kvRow("feeds", value: "\(store.feeds.count)")
+        }
+    }
+
+    private var apiSection: some View {
+        sectionGroup("api") {
+            kvRow("server", value: (config.serverURL ?? BridgeConfig.defaultServerURL).absoluteString)
+            kvRow("write fallback", value: config.apiWriteFallbackToICloud ? "icloud" : "local queue")
+            actionRow(config.apiWriteFallbackToICloud ? "use local queue" : "use icloud fallback", color: waAccent) {
+                config.apiWriteFallbackToICloud.toggle()
+            }
         }
     }
 

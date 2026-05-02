@@ -46,6 +46,10 @@
 	<string>Authenticate to access your profile</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Mira connects to your Mac Studio on the local network for instant status updates.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mira._tcp</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

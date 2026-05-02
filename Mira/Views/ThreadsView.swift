@@ -283,6 +283,7 @@ struct ThreadRow: View {
         switch item.status {
         case .queued: return .secondary
         case .working: return .blue
+        case .verifying: return .mint
         case .needsInput: return .orange
         case .done: return .green
         case .failed: return .red
@@ -293,6 +294,7 @@ struct ThreadRow: View {
     private var statusLabel: String? {
         switch item.status {
         case .working: return "Working"
+        case .verifying: return "Verifying"
         case .needsInput: return "Needs input"
         case .failed: return "Failed"
         default: return nil
