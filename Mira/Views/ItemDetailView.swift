@@ -117,7 +117,15 @@ struct ItemDetailView: View {
             Button {
                 let text = replyText.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { return }
-                commands.reply(to: itemId, content: text)
+                if item.type == .feed {
+                    commands.createDiscussion(
+                        title: "Re: \(item.title)",
+                        content: feedThreadContent(source: item, reply: text),
+                        tags: ["feed-comment"]
+                    )
+                } else {
+                    commands.reply(to: itemId, content: text)
+                }
                 replyText = ""
                 inputFocused = false
             } label: {
@@ -133,6 +141,21 @@ struct ItemDetailView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(waListBg)
+    }
+
+    private func feedThreadContent(source item: MiraItem, reply: String) -> String {
+        let preview = item.messages.last(where: { $0.kind != .statusCard })?.content ?? item.lastMessagePreview
+        let clipped = String(preview.prefix(900))
+        return """
+        Context from Home item:
+        Title: \(item.title)
+        Item ID: \(item.id)
+
+        \(clipped)
+
+        Reply:
+        \(reply)
+        """
     }
 }
 

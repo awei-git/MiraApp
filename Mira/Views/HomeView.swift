@@ -107,10 +107,8 @@ struct HomeView: View {
     @Environment(BridgeConfig.self) private var config
     @Environment(SyncEngine.self) private var sync
     @Environment(ItemStore.self) private var store
-    @Environment(CommandWriter.self) private var commands
     @Environment(NotificationManager.self) private var notifications
     @State private var navigationPath = NavigationPath()
-    @State private var showNewItem = false
     @State private var showRecall = false
     @State private var recallQuery = ""
     @State private var searchText = ""
@@ -121,7 +119,7 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            ZStack(alignment: .bottomTrailing) {
+            ZStack {
                 warmBg.ignoresSafeArea()
 
                 ScrollView {
@@ -195,18 +193,6 @@ struct HomeView: View {
                         Spacer(minLength: 80)
                     }
                 }
-
-                // FAB — single accent, restrained
-                Button { showNewItem = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(waListBg)
-                        .frame(width: 52, height: 52)
-                        .background(waAccent)
-                        .clipShape(Circle())
-                }
-                .padding(.trailing, 18)
-                .padding(.bottom, 14)
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -223,9 +209,6 @@ struct HomeView: View {
             }
             .navigationDestination(for: String.self) { id in
                 ItemDetailView(itemId: id)
-            }
-            .sheet(isPresented: $showNewItem) {
-                NewItemSheet()
             }
             .refreshable { sync.refresh() }
             .task(id: searchText) {

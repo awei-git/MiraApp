@@ -177,9 +177,9 @@ struct MainTabView: View {
                 }
                 .badge(store.needsAttention.count)
 
-            TodoView()
+            ThreadsView()
                 .tabItem {
-                    Label("Todo", systemImage: "checklist")
+                    Label("Threads", systemImage: "bubble.left.and.bubble.right")
                 }
 
             HealthView()
