@@ -47,4 +47,22 @@ struct MiraTests {
         #expect(feed.allowsReply)
     }
 
+    @Test func internalLivenessItemsAreHiddenFromUserLists() async throws {
+        let item = MiraItem(
+            id: "mira_liveness_task_dispatch",
+            type: .discussion,
+            title: "Output Liveness: task_dispatch stale",
+            status: .done,
+            tags: ["system", "liveness"],
+            origin: .agent,
+            pinned: false,
+            quick: false,
+            createdAt: "2026-05-15T14:00:00Z",
+            updatedAt: "2026-05-15T14:00:00Z",
+            messages: []
+        )
+
+        #expect(item.isInternalLivenessNoise)
+    }
+
 }

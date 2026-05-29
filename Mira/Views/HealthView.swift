@@ -359,12 +359,19 @@ struct HealthAlertBanner: View {
 
 // MARK: - Daily Health Insight Card
 
+private func isLegacyHealthInsightAlias(_ item: MiraItem) -> Bool {
+    item.id.hasPrefix("health_insight_")
+}
+
 struct HealthInsightCard: View {
     @Environment(ItemStore.self) private var store
 
     private var insight: MiraItem? {
-        store.items.filter {
-            $0.tags.contains("health") && $0.tags.contains("insight") && $0.status != .archived
+        store.items.filter { item in
+            item.tags.contains("health")
+                && item.tags.contains("insight")
+                && item.status != .archived
+                && !isLegacyHealthInsightAlias(item)
         }
         .sorted { $0.date > $1.date }
         .first
@@ -535,7 +542,11 @@ struct HealthFeedSection: View {
     @Environment(ItemStore.self) private var store
 
     private var healthItems: [MiraItem] {
-        store.items.filter { $0.tags.contains("health") && $0.status != .archived }
+        store.items.filter { item in
+            item.tags.contains("health")
+                && item.status != .archived
+                && !isLegacyHealthInsightAlias(item)
+        }
             .sorted { $0.date > $1.date }
     }
 

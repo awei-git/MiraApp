@@ -13,6 +13,7 @@ struct ArtifactCategory: Identifiable {
 
 private let knownCategories: [ArtifactCategory] = [
     ArtifactCategory(id: "writings",  name: "writings",  icon: "doc.text",       color: colorWriting),
+    ArtifactCategory(id: "books",     name: "books",     icon: "books.vertical", color: colorAnalysis),
     ArtifactCategory(id: "briefings", name: "briefings", icon: "globe",          color: colorExplore),
     ArtifactCategory(id: "audio",     name: "audio",     icon: "waveform",       color: colorPodcast),
     ArtifactCategory(id: "video",     name: "video",     icon: "film",           color: colorAlert),
