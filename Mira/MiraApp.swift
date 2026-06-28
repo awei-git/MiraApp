@@ -182,14 +182,14 @@ struct MainTabView: View {
                     Label("Threads", systemImage: "bubble.left.and.bubble.right")
                 }
 
+            DailyCollabView()
+                .tabItem {
+                    Label("Collab", systemImage: "sparkles")
+                }
+
             HealthView()
                 .tabItem {
                     Label("Health", systemImage: "heart.text.clipboard")
-                }
-
-            ArtifactsView()
-                .tabItem {
-                    Label("Artifacts", systemImage: "archivebox")
                 }
 
             SettingsView()

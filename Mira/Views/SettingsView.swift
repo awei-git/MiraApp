@@ -93,6 +93,27 @@ struct SettingsView: View {
             kvRow("active", value: "\(store.activeRequests.count)")
             kvRow("discussions", value: "\(store.discussions.count)")
             kvRow("feeds", value: "\(store.feeds.count)")
+            NavigationLink {
+                ArtifactsView()
+            } label: {
+                HStack {
+                    Text("artifacts")
+                        .font(.system(size: 13).monospaced())
+                        .foregroundStyle(waAccent)
+                        .tracking(0.5)
+                    Spacer()
+                    Image(systemName: "archivebox")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(waAccent)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .light))
+                        .foregroundStyle(waTextDim)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(waCardBg)
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -548,13 +569,14 @@ private struct BackendDailyUsageChart: View {
             GeometryReader { proxy in
                 HStack(alignment: .bottom, spacing: 3) {
                     ForEach(rows) { row in
+                        let spacingWidth = CGFloat(max(rows.count - 1, 0)) * 3
+                        let barWidth = max(5, (proxy.size.width - spacingWidth) / CGFloat(max(rows.count, 1)))
+                        let barHeight = max(4, CGFloat(row.tokens) / CGFloat(maxTokens) * proxy.size.height)
+                        let accessibilityText = "\(row.date), \(row.tokens) tokens"
                         RoundedRectangle(cornerRadius: 2, style: .continuous)
                             .fill(modelFamilyColor(row.dominantModelFamily))
-                            .frame(
-                                width: max(5, (proxy.size.width - CGFloat(max(rows.count - 1, 0)) * 3) / CGFloat(max(rows.count, 1))),
-                                height: max(4, CGFloat(row.tokens) / CGFloat(maxTokens) * proxy.size.height)
-                            )
-                            .accessibilityLabel("\(row.date), \(row.tokens) tokens")
+                            .frame(width: barWidth, height: barHeight)
+                            .accessibilityLabel(accessibilityText)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
