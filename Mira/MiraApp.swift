@@ -171,21 +171,16 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
+            DailyCollabView()
+                .tabItem {
+                    Label("Mira", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+
             HomeView()
                 .tabItem {
                     Label("Home", systemImage: "house")
                 }
                 .badge(store.needsAttention.count)
-
-            ThreadsView()
-                .tabItem {
-                    Label("Threads", systemImage: "bubble.left.and.bubble.right")
-                }
-
-            DailyCollabView()
-                .tabItem {
-                    Label("Collab", systemImage: "sparkles")
-                }
 
             HealthView()
                 .tabItem {
