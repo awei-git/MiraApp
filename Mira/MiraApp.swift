@@ -60,7 +60,7 @@ struct BridgeApp: App {
                 if showSplash {
                     SplashView(agentName: config.agentName)
                         .transition(.opacity)
-                } else if !config.isProfileSelected {
+                } else if !config.isSetup || !config.isProfileSelected {
                     ProfilePickerView()
                         .environment(config)
                         .onChange(of: config.isProfileSelected) { _, selected in
@@ -139,7 +139,9 @@ struct BridgeApp: App {
     }
 
     private func startServices() {
-        guard syncEngine == nil else { return }
+        guard syncEngine == nil,
+              config.isSetup,
+              config.isProfileSelected else { return }
         let cmd = CommandWriter(config: config, store: store)
         let engine = SyncEngine(config: config, store: store)
         let todos = TodoStore(config: config)

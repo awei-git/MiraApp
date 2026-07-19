@@ -122,7 +122,7 @@ struct ThreadsView: View {
             case .pinned:
                 base = store.pinnedItems
             }
-            result = base.filter { $0.createdDate >= tenDaysAgo }
+            result = base.filter { $0.date >= tenDaysAgo }
         }
 
         return result
@@ -151,36 +151,18 @@ struct ThreadsView: View {
         }
     }
 
-    /// Map of feed ID → created date, for binding discussions to their source feed's day
-    private var feedDateMap: [String: Date] {
-        var map: [String: Date] = [:]
-        for item in store.items where item.type == .feed {
-            map[item.id] = item.createdDate
-        }
-        return map
-    }
-
     private var groupedItems: [(key: String, items: [MiraItem])] {
         let cal = Calendar.current
         var groups: [String: [MiraItem]] = [:]
-        let feedDates = feedDateMap
 
         for item in filteredItems {
-            // Discussions with parentId use the parent feed's creation date
-            let groupDate: Date
-            if item.type == .discussion, let pid = item.parentId, let fd = feedDates[pid] {
-                groupDate = fd
-            } else {
-                groupDate = item.createdDate
-            }
-
             let key: String
-            if cal.isDateInToday(groupDate) {
+            if cal.isDateInToday(item.date) {
                 key = "Today"
-            } else if cal.isDateInYesterday(groupDate) {
+            } else if cal.isDateInYesterday(item.date) {
                 key = "Yesterday"
             } else {
-                key = Self.groupDateFormatter.string(from: groupDate)
+                key = Self.groupDateFormatter.string(from: item.date)
             }
             groups[key, default: []].append(item)
         }

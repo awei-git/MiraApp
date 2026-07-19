@@ -244,18 +244,18 @@ struct HomeView: View {
         return df
     }()
 
-    private static func computeGroupedItems(from filtered: [MiraItem]) -> [(key: String, items: [MiraItem])] {
+    static func computeGroupedItems(from filtered: [MiraItem]) -> [(key: String, items: [MiraItem])] {
         let cal = Calendar.current
         var groups: [String: [MiraItem]] = [:]
 
         for item in filtered {
             let key: String
-            if cal.isDateInToday(item.createdDate) {
+            if cal.isDateInToday(item.date) {
                 key = "Today"
-            } else if cal.isDateInYesterday(item.createdDate) {
+            } else if cal.isDateInYesterday(item.date) {
                 key = "Yesterday"
             } else {
-                key = groupDateFormatter.string(from: item.createdDate)
+                key = groupDateFormatter.string(from: item.date)
             }
             groups[key, default: []].append(item)
         }
@@ -309,7 +309,7 @@ struct HomeView: View {
             let tenDaysAgo = Calendar.current.date(byAdding: .day, value: -10,
                                                     to: Calendar.current.startOfDay(for: Date()))!
             return store.items.filter {
-                $0.status != .archived && $0.type != .request && $0.createdDate >= tenDaysAgo
+                $0.status != .archived && $0.type != .request && $0.date >= tenDaysAgo
             }
         } else {
             return store.search(debouncedSearchText).filter { $0.type != .request }
