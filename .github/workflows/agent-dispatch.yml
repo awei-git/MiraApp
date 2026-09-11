@@ -21,7 +21,7 @@ jobs:
         run: |
           LABELS='${{ join(github.event.issue.labels.*.name, ',') }}'
           if echo "$LABELS" | grep -q "agent/claude"; then
-            echo "agent=claude" >> "$GITHUB_OUTPUT"
+            echo "agent=codex" >> "$GITHUB_OUTPUT"
           elif echo "$LABELS" | grep -q "agent/codex"; then
             echo "agent=codex" >> "$GITHUB_OUTPUT"
           elif echo "$LABELS" | grep -q "agent/gemini"; then

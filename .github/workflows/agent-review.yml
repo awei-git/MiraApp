@@ -22,7 +22,7 @@ jobs:
         run: |
           LABELS='${{ join(github.event.pull_request.labels.*.name, ',') }}'
           if echo "$LABELS" | grep -q "review/claude"; then
-            echo "agent=claude" >> "$GITHUB_OUTPUT"
+            echo "agent=codex" >> "$GITHUB_OUTPUT"
           elif echo "$LABELS" | grep -q "review/codex"; then
             echo "agent=codex" >> "$GITHUB_OUTPUT"
           elif echo "$LABELS" | grep -q "review/gemini"; then
